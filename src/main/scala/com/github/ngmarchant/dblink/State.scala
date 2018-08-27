@@ -102,7 +102,7 @@ case class State(iteration: Long,
     oos.writeObject(this.distProbs)
     oos.writeObject(this.summaryVars)
     oos.writeObject(this.partitioner)
-    oos.writeObject(this.randomSeed)
+    oos.writeLong(this.randomSeed)
     oos.writeObject(this.bcParameters.value)
     oos.writeObject(this.bcPartitionFunction.value)
     oos.writeObject(this.bcRecordsCache.value)
