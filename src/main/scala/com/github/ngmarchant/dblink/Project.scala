@@ -33,6 +33,20 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Try
 
+/** An entity resolution project
+  *
+  * @param dataPath path to source records (in CSV format)
+  * @param projectPath path to project directory
+  * @param checkpointPath path for saving Spark checkpoints
+  * @param recIdAttribute name of record identifier column in dataFrame (must be unique across all files)
+  * @param fileIdAttribute name of file identifier column in dataFrame (optional)
+  * @param entIdAttribute name of entity identifier column in dataFrame (optional: if ground truth is available)
+  * @param matchingAttributes attribute specifications to use for matching
+  * @param partitionFunction partition function (determines how entities are partitioned across executors)
+  * @param randomSeed random seed
+  * @param expectedMaxClusterSize expected size of the largest record cluster (used as a hint to improve precaching)
+  * @param dataFrame data frame containing source records
+  */
 case class Project(dataPath: String, projectPath: String, checkpointPath: String,
                    recIdAttribute: String, fileIdAttribute: Option[String],
                    entIdAttribute: Option[String], matchingAttributes: IndexedSeq[Attribute],
