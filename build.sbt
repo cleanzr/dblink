@@ -48,3 +48,11 @@ publishTo in ThisBuild := {
   else Some("releases" at nexus + "service/local/staging/deploy/maven2")
 }
 publishMavenStyle in ThisBuild := true
+
+fork in run := true
+javaOptions in run ++= Seq(
+  "-Dlog4j.configuration=log4j.properties")
+outputStrategy := Some(StdoutOutput)
+
+test in assembly := {}
+mainClass in assembly := Some("com.github.ngmarchant.dblink.Run")
