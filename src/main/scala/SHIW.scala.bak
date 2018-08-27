@@ -1,0 +1,157 @@
+// Copyright (C) 2018  Australian Bureau of Statistics
+//
+// Author: Neil Marchant
+//
+// This file is part of dblink.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+import com.github.ngmarchant.dblink.SimilarityFn._
+import com.github.ngmarchant.dblink._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.{DataFrame, SparkSession}
+
+object SHIW extends Logging {
+
+  final val local = false // whether running on laptop (true) or MUPPET (false)
+  final val full = false // whether to use the full dataset (true) or a single block (false)
+
+  // Directory used for saving Spark checkpoints
+  val checkpointPath: String = if (local) {
+    "/home/nmarchant/SparkCheckpoint/"
+  } else {
+    "/scratch/neil/SparkCheckpoint/"
+  }
+
+  // File URI for the source data files
+  val filePath: String =
+    if (local) "/home/nmarchant/Dropbox/Employment/AMSIIntern ABS/experiments/shiw-data/comp.fixed.csv"
+    else "/data/neil/comp.fixed.csv"
+
+  // Directory used for saving samples + state
+  val projectPath: String =
+    if (local) "/home/nmarchant/shiw0810_3levels_med-prior_collapsed/"
+    else "/data/neil/shiw0810_3levels_med-prior_collapsed/"
+
+  // Schema for the source data files (used to read as DataFrame)
+  val recordsSchema = StructType(
+    StructField("NQUEST", StringType, nullable=false) ::
+      StructField("NORD", StringType, nullable=false) ::
+      StructField("ANNO", StringType, nullable=false) ::
+      StructField("IREG", StringType, nullable=false) ::
+      StructField("IPROV", StringType, nullable=false) ::
+      StructField("ACOM5", StringType, nullable=false) ::
+      StructField("PAR", StringType, nullable=false) ::
+      StructField("SESSO", StringType, nullable=false) ::
+      StructField("ETA", StringType, nullable=false) ::
+      StructField("ETA5", StringType, nullable=false) ::
+      StructField("STUDIO", StringType, nullable=false) ::
+      StructField("SETTP3", StringType, nullable=false) ::
+      StructField("QUALP7", StringType, nullable=false) ::
+      StructField("QUALP3", StringType, nullable=false) ::
+      StructField("NONOC", StringType, nullable=false) ::
+      StructField("AREA5", StringType, nullable=false) ::
+      StructField("AREA3", StringType, nullable=false) ::
+      StructField("SETTP7", StringType, nullable=false) ::
+      StructField("CFDIC", StringType, nullable=false) ::
+      StructField("CFEUR", StringType, nullable=false) ::
+      StructField("QUALP7N", StringType, nullable=false) ::
+      StructField("ACOM4C", StringType, nullable=false) ::
+      StructField("SETTP9", StringType, nullable=false) ::
+      StructField("STACIV", StringType, nullable=false) ::
+      StructField("NORDP", StringType, nullable=false) ::
+      StructField("NINTPRE", StringType, nullable=false) ::
+      StructField("NASCREG", StringType, nullable=false) ::
+      StructField("NASCAREA", StringType, nullable=false) ::
+      StructField("ANASC", StringType, nullable=false) ::
+      StructField("QUALP10", StringType, nullable=false) ::
+      StructField("SETTP11", StringType, nullable=false) ::
+      StructField("CFRED", StringType, nullable=false) ::
+      StructField("NEQU", StringType, nullable=false) ::
+      StructField("PERC", StringType, nullable=false) ::
+      StructField("PERL", StringType, nullable=false) ::
+      StructField("NPERC", StringType, nullable=false) ::
+      StructField("NPERL", StringType, nullable=false) ::
+      StructField("NCOMP", StringType, nullable=false) ::
+      StructField("ENASC2", StringType, nullable=false) ::
+      StructField("etapen", StringType, nullable=false) ::
+      StructField("ANASCI", StringType, nullable=false) ::
+      StructField("NORDC", StringType, nullable=false) :: Nil
+  )
+
+  val attributeSpecs: Array[AbstractAttribute] = Array(
+    Attribute("IREG", ConstantSimilarityFn),   // regional code
+    Attribute("SESSO", ConstantSimilarityFn),  // sex
+    Attribute("ANASCI", ConstantSimilarityFn), // inferred DOB
+    Attribute("STUDIO", ConstantSimilarityFn), // level of education
+    Attribute("PAR", ConstantSimilarityFn),    // household position
+    Attribute("STACIV", ConstantSimilarityFn), // marital status
+    Attribute("PERC", ConstantSimilarityFn),   // income earner
+    Attribute("CFDIC", ConstantSimilarityFn)   // head of household
+  )
+  val recIdColName: String = "rec_id"
+  val fileIdColName: Option[String] = Some("ANNO") // not needed for one file
+  val entIdColName: Option[String] = Some("ent_id")
+
+  // Partitioning
+  val partitionLevels: Int = 3
+  val partitionVars: Seq[Int] = Seq(2, 1, 0, 3)
+
+  /** Loads the source data files into a Spark DataFrame using the recordsSchema.
+    * No transformations are applied.
+    */
+  lazy val dataFrame: DataFrame = {
+    val spark = SparkSession.builder().getOrCreate()
+    import spark.implicits._
+
+    val df = if (full) {
+      spark.read.format("csv")
+        .option("header", "true")
+        .option("mode", "DROPMALFORMED")
+        .option("nullValue", "MISSING")
+        .schema(recordsSchema)
+        .load(filePath)
+    } else {
+      spark.read.format("csv")
+        .option("header", "true")
+        .option("mode", "DROPMALFORMED")
+        .option("nullValue", "MISSING")
+        .schema(recordsSchema)
+        .load(filePath)
+        .filter(r => {
+          val anno = r.getAs[String]("ANNO")
+          anno == "2008" || anno == "2010"
+        })
+    }
+
+    df.withColumn("ent_id", concat($"NQUEST", $"NORDC"))
+      .withColumn("rec_id", concat($"ANNO", $"ent_id"))
+  }
+
+  lazy val numRecords: Long = dataFrame.count()
+
+  val alpha: Double = numRecords * 0.1 * 0.01
+  val beta: Double = numRecords * 0.1
+
+  lazy val parameters = Parameters(
+    distortionPrior = Array.fill(attributeSpecs.length)(BetaShapeParameters(alpha, beta)),
+    numEntities = numRecords,
+    randomSeed = 319158L,
+    maxClusterSize = 2 + 8
+  )
+
+  def apply(): EBER = new EBER(projectPath, checkpointPath, dataFrame, recIdColName, fileIdColName,
+    attributeSpecs, parameters, partitionLevels, partitionVars, entIdColName)
+}

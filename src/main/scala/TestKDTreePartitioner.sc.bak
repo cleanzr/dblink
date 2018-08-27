@@ -1,0 +1,19 @@
+import NCVR.loadRecords
+import com.github.ngmarchant.dblink.accumulators.MapDoubleAccumulator
+import com.github.ngmarchant.dblink.partitioning.KDTreePartitioner
+import org.apache.spark.{SparkConf, SparkContext}
+import com.github.ngmarchant.dblink.Types.{StringField, CategoricalField}
+val conf = new SparkConf()
+  .setMaster("local[*]")
+  .setAppName("EBER")
+
+val sc = SparkContext.getOrCreate(conf)
+sc.setLogLevel("WARN")
+
+val records = loadRecords()
+val fields = Seq((CategoricalField, 0), (StringField, 1), (StringField, 0), (StringField, 2))
+
+val partitioner = KDTreePartitioner(6, records, fields)
+
+println(s"There are ${partitioner.numPartitions} partitions")
+records.take(20).foreach(r => println(s"Record ${r.id} is in partition ${partitioner.getPartitionId(r.values)}"))

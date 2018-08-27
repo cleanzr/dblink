@@ -1,0 +1,130 @@
+// Copyright (C) 2018  Australian Bureau of Statistics
+//
+// Author: Neil Marchant
+//
+// This file is part of dblink.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+import com.github.ngmarchant.dblink.SimilarityFn._
+import com.github.ngmarchant.dblink._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.{DataFrame, SparkSession}
+
+object NCVR extends Logging {
+
+  final val local = false // whether running on laptop (true) or MUPPET (false)
+  final val full = true // whether to use the full dataset (true) or a single block (false)
+
+  // Directory used for saving Spark checkpoints
+  val checkpointPath: String =
+    if (local) "/home/nmarchant/SparkCheckpoint/"
+    else "/scratch/neil/SparkCheckpoint/"
+
+  // File URI for the source data files
+  val filePath: String =
+    if (local) "/home/nmarchant/Dropbox/Employment/AMSIIntern ABS/experiments/ncvoter-data/ncvoter-20140619-temporal-balanced-ratio-1to1-*.csv"
+    else "/scratch/neil/ncvoter-20140619-temporal-balanced-ratio-1to1-*.csv"
+
+  // Directory used for saving samples + state
+  val projectPath: String =
+    if (local) "/home/nmarchant/ncvr_6levels_med-prior_collapsed/"
+    else "/data/neil/ncvr_6levels_med-prior_collapsed/"
+
+  // Schema for the source data files (used to read as DataFrame)
+  val recordsSchema = StructType(
+    StructField("rec_id", StringType, nullable = false) ::
+      StructField("voter_id", StringType, nullable = false) ::
+      StructField("first_name", StringType, nullable = false) ::
+      StructField("middle_name", StringType, nullable = false) ::
+      StructField("last_name", StringType, nullable = false) ::
+      StructField("age", StringType, nullable = false) ::
+      StructField("gender", StringType, nullable = false) ::
+      StructField("street_address", StringType, nullable = false) ::
+      StructField("city", StringType, nullable = false) ::
+      StructField("state", StringType, nullable = false) ::
+      StructField("zip_code", StringType, nullable = false) ::
+      StructField("full_phone_num", StringType, nullable = false) :: Nil
+  )
+
+  // Maps a file path to a unique file identifier
+  val pathToFileId: String => String = (path: String) => {
+    path.split("/").last.substring(46, 47)
+  }
+
+  // Column names
+  val catLinkingVars: Seq[String] = Seq("age", "gender", "zip_code")
+  val strLinkingVars: Seq[String] = Seq("first_name", "middle_name", "last_name")
+  val attributeSpecs: Array[AbstractAttribute] = Array(
+    Attribute("age", ConstantSimilarityFn),
+    Attribute("gender", ConstantSimilarityFn),
+    Attribute("zip_code", ConstantSimilarityFn),
+    Attribute("first_name", LevenshteinSimilarityFn(0.7)),
+    Attribute("middle_name", LevenshteinSimilarityFn(0.7)),
+    Attribute("last_name", LevenshteinSimilarityFn(0.7))
+  )
+  val recIdColName: String = "rec_id"
+  val fileIdColName: Option[String] = Some("file_id")
+  val entIdColName: Option[String] = Some("voter_id")
+
+  // Partitioning
+  val partitionLevels: Int = 6
+  val partitionVars: Seq[Int] = Seq(3, 5, 2, 0)
+
+  /** Loads the source data files into a Spark DataFrame using the
+    * recordsSchema. No transformations are applied.
+    */
+  lazy val dataFrame: DataFrame = {
+    val spark = SparkSession.builder().getOrCreate()
+    import spark.implicits._
+    spark.udf.register("get_file_name", pathToFileId)
+
+    val df = if (full) {
+      spark.read.format("csv")
+        .option("header", "true")
+        .option("mode", "DROPMALFORMED")
+        .option("nullValue", "MISSING")
+        .schema(recordsSchema)
+        .load(filePath)
+        .na.fill("", Seq("first_name","middle_name","last_name","zip_code","city"))
+    } else {
+      spark.read.format("csv")
+        .option("header", "true")
+        .option("mode", "DROPMALFORMED")
+        .option("nullValue", "MISSING")
+        .schema(recordsSchema)
+        .load(filePath)
+        .filter(r => r.getAs[String]("age") == "50") //
+        .na.fill("", Seq("middle_name"))
+    }
+
+    df.withColumn("file_id", callUDF("get_file_name", input_file_name))
+  }
+
+  lazy val numRecords: Long = dataFrame.count()
+
+  val alpha: Double = numRecords * 0.1 * 0.01
+  val beta: Double = numRecords * 0.1
+
+  lazy val parameters = Parameters(
+    distortionPrior = Array.fill(attributeSpecs.length)(BetaShapeParameters(alpha, beta)),
+    numEntities = numRecords,
+    randomSeed = 319158L,
+    maxClusterSize = 2 + 8
+  )
+
+  def apply(): EBER = new EBER(projectPath, checkpointPath, dataFrame, recIdColName, fileIdColName,
+    attributeSpecs, parameters, partitionLevels, partitionVars, entIdColName)
+}

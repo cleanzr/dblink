@@ -1,0 +1,105 @@
+// Copyright (C) 2018  Australian Bureau of Statistics
+//
+// Author: Neil Marchant
+//
+// This file is part of dblink.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+import com.github.ngmarchant.dblink.SimilarityFn._
+import com.github.ngmarchant.dblink._
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.{DataFrame, SparkSession}
+
+object RLdata10000 extends Logging {
+
+  val local = true // whether running on laptop (true) or MUPPET (false)
+
+  // Directory used for saving Spark checkpoints
+  val checkpointPath: String =
+    if (local) "/home/nmarchant/SparkCheckpoint/"
+    else "/scratch/neil/SparkCheckpoint/"
+
+  // File URI for the source data files
+  val filePath: String =
+    if (local) "/home/nmarchant/Dropbox/Employment/AMSIIntern ABS/experiments/RLdata/RLdata10000.csv"
+    else "/data/neil/RLdata10000.csv"
+
+  // Directory used for saving samples + state
+  val projectPath: String =
+    if (local) "/home/nmarchant/RLdata10000_2levels_med-prior_collapsed_0.1temp/"
+    else "/data/neil/RLdata10000_2levels_med-prior_collapsed_0.1temp/"
+
+  // Schema for the source data files (used to read as DataFrame)
+  val recordsSchema = StructType(
+    StructField("fname_c1", StringType, nullable=false) ::
+      StructField("fname_c2", StringType, nullable=false) ::
+      StructField("lname_c1", StringType, nullable=false) ::
+      StructField("lname_c2", StringType, nullable=false) ::
+      StructField("by", StringType, nullable=false) ::
+      StructField("bm", StringType, nullable=false) ::
+      StructField("bd", StringType, nullable=false) ::
+      StructField("rec_id", StringType, nullable=false) ::
+      StructField("ent_id", StringType, nullable=false) :: Nil
+  )
+
+  // Column names
+  val catLinkingVars: Seq[String] = Seq("by", "bm", "bd")
+  val strLinkingVars: Seq[String] = Seq("fname_c1", "lname_c1")
+  val attributeSpecs: Array[AbstractAttribute] = Array(
+    Attribute("by", ConstantSimilarityFn),
+    Attribute("bm", ConstantSimilarityFn),
+    Attribute("bd", ConstantSimilarityFn),
+    Attribute("fname_c1", LevenshteinSimilarityFn()),
+    Attribute("lname_c1", LevenshteinSimilarityFn())
+  )
+  val recIdColName: String = "rec_id"
+  val fileIdColName: Option[String] = None // not needed for one file
+  val entIdColName: Option[String] = Some("ent_id")
+
+  // Partitioning
+  val partitionLevels: Int = 1
+  val partitionVars: Seq[Int] = Seq(3)
+
+  /** Loads the source data files into a Spark DataFrame using the recordsSchema.
+    * No transformations are applied.
+    */
+  lazy val dataFrame: DataFrame = {
+    val spark = SparkSession.builder().getOrCreate()
+
+    spark.read.format("csv")
+      .option("header", "true")
+      .option("mode", "DROPMALFORMED")
+      .option("nullValue", "NA")
+      .schema(recordsSchema)
+      .load(filePath)
+  }
+
+  lazy val numRecords: Long = dataFrame.count()
+
+  val alpha: Double = numRecords * 0.1 * 0.01
+  val beta: Double = numRecords * 0.1
+  //val alpha: Double = 1.0
+  //val beta: Double = 99.0
+
+  lazy val parameters = Parameters(
+    distortionPrior = Array.fill(attributeSpecs.length)(BetaShapeParameters(alpha, beta)),
+    numEntities = numRecords,
+    randomSeed = 319158L,
+    maxClusterSize = 2 + 8
+  )
+
+  def apply(): EBER = new EBER(projectPath, checkpointPath, dataFrame, recIdColName, fileIdColName,
+    attributeSpecs, parameters, partitionLevels, partitionVars, entIdColName)
+}

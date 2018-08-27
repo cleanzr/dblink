@@ -1,0 +1,67 @@
+// Copyright (C) 2018  Australian Bureau of Statistics
+//
+// Author: Neil Marchant
+//
+// This file is part of dblink.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+import org.apache.spark.{SparkConf, SparkContext}
+import com.typesafe.config.ConfigFactory
+import java.io.File
+import com.github.ngmarchant.dblink.{AbstractAttribute, Attribute, ProjectSettings}
+import com.github.ngmarchant.dblink.SimilarityFn.{ConstantSimilarityFn, LevenshteinSimilarityFn}
+import com.github.ngmarchant.dblink.analysis.LinkageChain.partitionSizes
+import com.github.ngmarchant.dblink.analysis.{ClusteringMetrics, Clusters, PairwiseMetrics}
+import com.github.ngmarchant.dblink.analysis.implicits._
+import com.github.ngmarchant.dblink.partitioning.KDTreePartitioner
+
+object Main {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf()
+      .setMaster("local[*]")
+      .setAppName("EBER")
+
+    val sc = SparkContext.getOrCreate(conf)
+    sc.setLogLevel("WARN")
+
+    val config = ConfigFactory.parseFile(new File("/home/nmarchant/Dropbox/Employment/AMSIIntern ABS/dblink/RLdata500.conf"))
+
+    val projectSettings = ProjectSettings(config)
+
+    //val projs = Array[EBER](RLdata10000(), NLTCS(), NCVR(), ABSEmployee(), SHIW())
+    val proj = ABSEmployee()
+
+//    val proj = SHIW()
+    //val records = proj.records.map(record => (record.id, (record.values.catFields ++ record.values.strFields).toSeq))
+    //val exactMatchClusters = baselines.nearClusters(records, 0).cache()
+    //val trueMembership = proj.membership.get.cache()
+    //val trueClusters = Clusters(trueMembership)
+    //val trueNumClusters = trueClusters.count()
+    //val predNumClusters = exactMatchClusters.count()
+    //println(s"Predicted number of clusters: $predNumClusters")
+    //println(s"Relative error in number of clusters: ${1.0 * (predNumClusters - trueNumClusters)/trueNumClusters}.")
+    //PairwiseMetrics(exactMatchClusters.toPairwiseLinks, trueMembership.toPairwiseLinks).print()
+    //ClusteringMetrics(exactMatchClusters, trueClusters).print()
+//    projs.foreach{ proj =>
+//      proj.linkageChain match {
+//        case Some(chain) => partitionSizes(chain, proj.projectPath)
+//        case None => println("No linkage chain")
+//      }
+//    }
+
+    proj.sample(300, 0, 10)
+    proj.evaluate(1000L)
+  }
+}
