@@ -21,21 +21,15 @@ package com.github.ngmarchant.dblink
 
 import java.io.File
 
-import org.apache.spark.{SparkConf, SparkContext}
 import com.typesafe.config.ConfigFactory
+import org.apache.spark.sql.SparkSession
 
-object Rundblink extends App with Logging {
+object Run extends App with Logging {
 
-  //val config = ConfigFactory.parseFile(new File(args.head))
-  val config = ConfigFactory.parseFile(new File("/home/nmarchant/Dropbox/Employment/AMSIIntern ABS/dblink/RLdata10000.conf")).resolve()
+  val config = ConfigFactory.parseFile(new File(args.head)).resolve()
 
-  // Create SparkContext *before* processing project config, as it's needed to
-  // verify aspects of the config
-  val conf = new SparkConf()
-    .setMaster("local[*]")
-    .setAppName("dblink")
-
-  val sc = SparkContext.getOrCreate(conf)
+  val spark = SparkSession.builder().appName("dblink").getOrCreate()
+  val sc = spark.sparkContext
   sc.setLogLevel("WARN")
 
   val project = Project(config)
