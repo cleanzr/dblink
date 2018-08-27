@@ -1,4 +1,3 @@
-import com.github.ngmarchant.dblink.Rundblink
 // Copyright (C) 2018  Australian Bureau of Statistics
 //
 // Author: Neil Marchant
@@ -18,8 +17,13 @@ import com.github.ngmarchant.dblink.Rundblink
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import com.github.ngmarchant.dblink.Run
+import org.apache.spark.{SparkConf, SparkContext}
+
 object Launch {
   def main(args: Array[String]) {
-    Rundblink.main(args)
+    val conf = new SparkConf().setMaster("local[*]").setAppName("dblink")
+    val sc = SparkContext.getOrCreate(conf)
+    Run.main(args)
   }
 }
