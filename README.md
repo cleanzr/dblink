@@ -1,7 +1,7 @@
 # dblink
 `dblink` is a Spark package for performing unsupervised entity resolution 
 (ER) on structured data.
-It is based on a Bayesian model called `blink` originally due to 
+It's based on a Bayesian model called `blink` originally due to 
 [(Steorts, 2015)](https://projecteuclid.org/euclid.ba/1441790411), 
 and extended to a distributed setting in 
 [(Marchant et al., 2018)](https://TODO).
@@ -12,7 +12,7 @@ and provides a framework for answering probabilistic queries about entity
 membership.
 
 `dblink` approximates the posterior using Markov chain Monte Carlo.
-It write samples (of the clustering configuration) to disk in Parquet format.
+It write samples (of clustering configurations) to disk in Parquet format.
 Diagnostic summary statistics are also written to disk in CSV format—these are 
 useful for assessing convergence of the Markov chain.
 
