@@ -13,8 +13,8 @@ membership.
 
 `dblink` approximates the posterior using Markov chain Monte Carlo.
 It write samples (of the clustering configuration) to disk in Parquet format.
-Diagnostic summary statistics are also written to disk in CSV format.
-These are useful for assessing convergence of the Markov chain.
+Diagnostic summary statistics are also written to disk in CSV format—these are 
+useful for assessing convergence of the Markov chain.
 
 ## How to: Add dblink as a project dependency
 _Note: This won't work yet. Waiting for project to be accepted._
