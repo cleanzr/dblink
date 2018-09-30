@@ -59,7 +59,7 @@ class KDTreePartitioner[T : Ordering](numLevels: Int,
     }
   }
 
-  override def getPartitionId(attributes: Array[T]): Int = tree.getLeafNumber(attributes)
+  override def getPartitionId(attributeValues: Array[T]): Int = tree.getLeafNumber(attributeValues)
 
   override def mkString: String = {
     if (numLevels == 0) s"KDTreePartitioner(numLevels=0)"
@@ -89,9 +89,9 @@ object KDTreePartitioner extends Logging {
       * attribute value per node */
     records.foreachPartition { partition =>
       val tree = bcTree.value
-      partition.foreach { attributes =>
-        val attributeValue = attributes(attributeId)
-        val nodeId = tree.getLeafNodeId(attributes)
+      partition.foreach { attributeValues =>
+        val attributeValue = attributeValues(attributeId)
+        val nodeId = tree.getLeafNodeId(attributeValues)
         acc.add((nodeId, attributeValue), 1L)
       }
     }
