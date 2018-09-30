@@ -22,11 +22,22 @@ package com.github.ngmarchant.dblink.partitioning
 import org.apache.spark.rdd.RDD
 
 abstract class PartitionFunction[T] extends Serializable {
+
+  /** Number of partitions */
   def numPartitions: Int
 
+  /** Fit partition function based on a sample of records
+    *
+    * @param records RDD of records. Assumes no values are missing.
+    */
   def fit(records: RDD[Array[T]]): Unit
 
-  def getPartitionId(attributes: Array[T]): Int
+  /** Get assigned partition for a set of attribute values
+    *
+    * @param attributeValues array of (entity) attribute values. Assumes no values are missing.
+    * @return identifier of assigned parittion: an integer in {0, ..., numPartitions - 1}.
+    */
+  def getPartitionId(attributeValues: Array[T]): Int
 
   def mkString: String
 }
