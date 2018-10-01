@@ -58,7 +58,8 @@ object ProjectActions {
             sampleSize = action.getInt("parameters.sampleSize"),
             burninInterval = action.getInt("parameters.burninInterval"),
             thinningInterval = action.getInt("parameters.thinningInterval"),
-            resume = action.getBoolean("parameters.resume"))
+            resume = action.getBoolean("parameters.resume"),
+            sampler = Try {action.getString("parameters.sampler")} getOrElse "PCG-I")
         case "evaluate" =>
           new EvaluateAction(project,
             lowerIterationCutoff = Try {action.getInt("parameters.lowerIterationCutoff")} getOrElse 0,

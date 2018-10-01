@@ -52,6 +52,7 @@ case class Project(dataPath: String, projectPath: String, checkpointPath: String
                    entIdAttribute: Option[String], matchingAttributes: IndexedSeq[Attribute],
                    partitionFunction: PartitionFunction[ValueId], randomSeed: Long,
                    expectedMaxClusterSize: Int, dataFrame: DataFrame) extends Logging {
+  require(expectedMaxClusterSize >= 0, "expectedMaxClusterSize must be non-negative")
 
   def sparkContext: SparkContext = dataFrame.sparkSession.sparkContext
 

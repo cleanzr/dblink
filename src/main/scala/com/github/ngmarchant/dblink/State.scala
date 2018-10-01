@@ -62,18 +62,19 @@ case class State(iteration: Long,
   /** Applies a Markov transition operator to the given state
     *
     * @param checkpoint whether to checkpoint the RDD.
-    * @param collapseDistortions whether to collapse the distortion indicator
-    *                            variables for the latent attribute value update.
+    * @param collapsedEntityIds whether to do a partially-collapsed update for the entity ids (default: false)
+    * @param collapsedEntityValues whether to do a partially-collapsed update for the entity values (default: true)
     * @return new State after applying the transition operator.
     */
   def nextState(checkpoint: Boolean,
-                collapseDistortions: Boolean = true): State = {
+                collapsedEntityIds: Boolean = false,
+                collapsedEntityValues: Boolean = true): State = {
     /** Update distortion probabilities and broadcast */
     val newDistProbs = updateDistProbs(summaryVars, bcRecordsCache.value)
     val bcDistProbs = partitions.sparkContext.broadcast(newDistProbs)
 
     val newPartitions = updatePartitions(iteration, partitions, bcDistProbs,
-      partitioner, randomSeed, bcPartitionFunction, bcRecordsCache, collapseDistortions)
+      partitioner, randomSeed, bcPartitionFunction, bcRecordsCache, collapsedEntityIds, collapsedEntityValues)
     /** If handling persistence here, may want to set this:
       * .persist(StorageLevel.MEMORY_ONLY_SER) */
     if (checkpoint) newPartitions.checkpoint()

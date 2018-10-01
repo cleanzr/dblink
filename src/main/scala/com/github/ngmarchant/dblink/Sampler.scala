@@ -40,11 +40,13 @@ object Sampler extends Logging {
     */
   def sample(initialState: State,
              sampleSize: Int,
+             savePath: String,
              burninInterval: Int = 0,
              thinningInterval: Int = 1,
              checkpointInterval: Int = 10,
              writeBufferSize: Int = 10,
-             savePath: String): State = {
+             collapsedEntityIds: Boolean = false,
+             collapsedEntityValues: Boolean = true): State = {
     require(burninInterval >= 0, "`burninInterval` must be non-negative.")
     require(thinningInterval > 0, "`thinningInterval` must be positive.")
     require(checkpointInterval >= 0, "`checkpointInterval` must be non-negative.")
@@ -76,7 +78,7 @@ object Sampler extends Logging {
     while (sampleCtr < sampleSize) {
       val completedIterations = state.iteration - startIteration
 
-      state = state.nextState(checkpoint = state.iteration%checkpointInterval == 0, true)
+      state = state.nextState(checkpoint = state.iteration%checkpointInterval == 0, collapsedEntityIds, collapsedEntityValues)
       //newState.partitions.persist(StorageLevel.MEMORY_ONLY_SER)
       //state.partitions.unpersist()
       //state = newState

@@ -28,27 +28,40 @@ trait ProjectAction {
 }
 
 object ProjectAction {
+  private val supportedSamplers = Set("PCG-I", "PCG-II", "Gibbs")
+  private val supportedEvaluationMetrics = Set("pairwise", "cluster")
 
   class SampleAction(project: Project, sampleSize: Int, burninInterval: Int,
-                     thinningInterval: Int, resume: Boolean) extends ProjectAction {
+                     thinningInterval: Int, resume: Boolean, sampler: String) extends ProjectAction {
+    require(sampleSize > 0, "sampleSize must be positive")
+    require(burninInterval >= 0, "burninInterval must be non-negative")
+    require(thinningInterval >= 0, "thinningInterval must be non-negative")
+    require(supportedSamplers.contains(sampler), s"sampler must be one of ${supportedSamplers.mkString("", ",", "")}.")
+
     override def execute(): Unit = {
       val initialState = if (resume) {
         project.getSavedState.getOrElse(project.generateInitialState)
       } else {
         project.generateInitialState
       }
-      Sampler.sample(initialState, sampleSize, burninInterval, thinningInterval, savePath = project.projectPath)
+      sampler match {
+        case "PCG-I" => Sampler.sample(initialState, sampleSize, project.projectPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = false, collapsedEntityValues = true)
+        case "PCG-II" => Sampler.sample(initialState, sampleSize, project.projectPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = true, collapsedEntityValues = true)
+        case "Gibbs" => Sampler.sample(initialState, sampleSize, project.projectPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = false, collapsedEntityValues = false)
+      }
     }
 
     override def mkString: String = {
-      if (resume) s"SampleAction: Evolving the chain from saved state with sampleSize=$sampleSize, burninInterval=$burninInterval and thinningInterval=$thinningInterval"
-      else s"SampleAction: Evolving the chain from new initial state with sampleSize=$sampleSize, burninInterval=$burninInterval and thinningInterval=$thinningInterval"
+      if (resume) s"SampleAction: Evolving the chain from saved state with sampleSize=$sampleSize, burninInterval=$burninInterval, thinningInterval=$thinningInterval and sampler=$sampler"
+      else s"SampleAction: Evolving the chain from new initial state with sampleSize=$sampleSize, burninInterval=$burninInterval, thinningInterval=$thinningInterval and sampler=$sampler"
     }
   }
 
   class EvaluateAction(project: Project, lowerIterationCutoff: Int, metrics: Traversable[String],
                        useExistingSMPC: Boolean) extends ProjectAction {
     require(project.entIdAttribute.isDefined, "Ground truth entity ids are required for evaluation")
+    require(lowerIterationCutoff >=0, "lowerIterationCutoff must be non-negative")
+    require(metrics.forall(m => supportedEvaluationMetrics.contains(m)), s"metrics must be one of ${supportedEvaluationMetrics.mkString("", ",", "")}.")
 
     override def execute(): Unit = {
       import com.github.ngmarchant.dblink.analysis.implicits._
@@ -100,6 +113,8 @@ object ProjectAction {
 
   class SummarizeAction(project: Project, lowerIterationCutoff: Int,
                         quantities: Traversable[String]) extends ProjectAction {
+    require(lowerIterationCutoff >= 0, "lowerIterationCutoff must be non-negative")
+
     override def execute(): Unit = {
       import com.github.ngmarchant.dblink.analysis.implicits._
       project.getSavedLinkageChain(lowerIterationCutoff) match {

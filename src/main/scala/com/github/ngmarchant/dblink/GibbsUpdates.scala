@@ -118,7 +118,8 @@ object GibbsUpdates {
                        randomSeed: Long,
                        bcPartitionFunction: Broadcast[PartitionFunction[ValueId]],
                        bcRecordsCache: Broadcast[RecordsCache],
-                       collapseDistortions: Boolean): Partitions = {
+                       collapsedEntityId: Boolean,
+                       collapsedEntityValues: Boolean): Partitions = {
     partitions.mapPartitionsWithIndex { (index, partition) =>
       /** Convenience variables */
       val recordsCache = bcRecordsCache.value
@@ -133,7 +134,7 @@ object GibbsUpdates {
         * this partition and iteration) */
       recordsCache.setRand(rand)
 
-      updatePartition(partition, bcDistProbs.value, bcPartitionFunction.value, recordsCache, collapseDistortions)
+      updatePartition(partition, bcDistProbs.value, bcPartitionFunction.value, recordsCache, collapsedEntityId, collapsedEntityValues)
     }.partitionBy(partitioner) // Move entity clusters to newly-assigned partitions
      //.persist(StorageLevel.MEMORY_ONLY_SER)
   }
@@ -145,7 +146,8 @@ object GibbsUpdates {
                       distProbs: DistortionProbs,
                       partitionFunction: PartitionFunction[ValueId],
                       recordsCache: RecordsCache,
-                      collapseDistortions: Boolean)
+                      collapsedEntityId: Boolean,
+                      collapsedEntityValues: Boolean)
                      (implicit rand: RandomGenerator): Iterator[(PartitionId, EntRecPair)] = {
     /** Convenience variables */
     val indexedAttributes = recordsCache.indexedAttributes
@@ -178,13 +180,16 @@ object GibbsUpdates {
       */
     val linksIndex = new LinksIndex(entities.keysIterator, records.length)
     records.iterator.zipWithIndex.foreach { case (record, rowId) =>
-      val entId = updateEntityId(records(rowId), entities, entityInvertedIndex, recordsCache)
-      //val entId = updateEntityIdCollapsed(records(rowId), entities, entityInvertedIndex, recordsCache, distProbs)
+      val entId = if (collapsedEntityId) {
+        updateEntityIdCollapsed(records(rowId), entities, entityInvertedIndex, recordsCache, distProbs)
+      } else {
+        updateEntityId(records(rowId), entities, entityInvertedIndex, recordsCache)
+      }
       linksIndex.addLink(entId, rowId)
     }
 
     /** Update entity attribute values and store in a map (entId -> Entity) */
-    val newEntities = updateEntityValues(records, linksIndex, distProbs, recordsCache, collapseDistortions)
+    val newEntities = updateEntityValues(records, linksIndex, distProbs, recordsCache, collapsedEntityValues)
 
     /** Build output iterator over entity-record pairs (separately for the
       * entity-record pairs and isolated entities) */
@@ -624,13 +629,13 @@ object GibbsUpdates {
                          linksIndex: LinksIndex,
                          distProbs: DistortionProbs,
                          recordsCache: RecordsCache,
-                         collapseDistortions: Boolean)
+                         collapsedEntityValues: Boolean)
                         (implicit rand: RandomGenerator): mutable.LongMap[Entity] = {
     val newEntities = mutable.LongMap.empty[Entity] // TODO: use builder?
     linksIndex.toIterator.foreach { case (entId, linkedRowIds) =>
       val entityValues = Array.tabulate(recordsCache.numAttributes) { attrId =>
         val indexedAttribute = recordsCache.indexedAttributes(attrId)
-        if (collapseDistortions) {
+        if (collapsedEntityValues) {
           updateEntityValueCollapsed(attrId, indexedAttribute, records, linkedRowIds, distProbs)
         } else {
           updateEntityValue(attrId, indexedAttribute, records, linkedRowIds)
