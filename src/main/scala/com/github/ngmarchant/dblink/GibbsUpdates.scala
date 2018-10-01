@@ -178,13 +178,13 @@ object GibbsUpdates {
       */
     val linksIndex = new LinksIndex(entities.keysIterator, records.length)
     records.iterator.zipWithIndex.foreach { case (record, rowId) =>
-      val entId = drawEntityId(records(rowId), entities, entityInvertedIndex, recordsCache)
+      val entId = updateEntityId(records(rowId), entities, entityInvertedIndex, recordsCache)
       //val entId = updateEntityIdCollapsed(records(rowId), entities, entityInvertedIndex, recordsCache, distProbs)
       linksIndex.addLink(entId, rowId)
     }
 
     /** Update entity attribute values and store in a map (entId -> Entity) */
-    val newEntities = updateEntities(records, linksIndex, distProbs, recordsCache, collapseDistortions)
+    val newEntities = updateEntityValues(records, linksIndex, distProbs, recordsCache, collapseDistortions)
 
     /** Build output iterator over entity-record pairs (separately for the
       * entity-record pairs and isolated entities) */
@@ -307,9 +307,9 @@ object GibbsUpdates {
 
   // ------------------------------------------------------------------------ //
   // Warning: updates rand in-place
-  def drawDistProbs(summaryVars: SummaryVars,
-                    recordsCache: RecordsCache)
-                   (implicit rand: RandomGenerator): DistortionProbs = {
+  def updateDistProbs(summaryVars: SummaryVars,
+                      recordsCache: RecordsCache)
+                     (implicit rand: RandomGenerator): DistortionProbs = {
 
     val probs = recordsCache.distortionPrior.zipWithIndex.flatMap { case (BetaShapeParameters(alpha, beta), attrId) =>
       recordsCache.fileSizes.map { case (fileId, numRecords) =>
@@ -365,12 +365,12 @@ object GibbsUpdates {
     record.copy(values = newValues)
   }
 
-  def drawEntityIdCollapsed(record: Record[DistortedValue],
-                            entities: mutable.LongMap[Entity],
-                            entityInvertedIndex: EntityInvertedIndex,
-                            recordsCache: RecordsCache,
-                            distProbs: DistortionProbs)
-                           (implicit rand: RandomGenerator): EntityId = {
+  def updateEntityIdCollapsed(record: Record[DistortedValue],
+                              entities: mutable.LongMap[Entity],
+                              entityInvertedIndex: EntityInvertedIndex,
+                              recordsCache: RecordsCache,
+                              distProbs: DistortionProbs)
+                             (implicit rand: RandomGenerator): EntityId = {
     val indexedAttributes = recordsCache.indexedAttributes
     val entIds = entities.keys.toArray
     val valuesAndWeights = entities.mapValues { entity =>
@@ -393,11 +393,11 @@ object GibbsUpdates {
     DiscreteDist(valuesAndWeights).sample()
   }
 
-  def drawEntityId(record: Record[DistortedValue],
-                   entities: mutable.LongMap[Entity],
-                   entityInvertedIndex: EntityInvertedIndex,
-                   recordsCache: RecordsCache)
-                  (implicit rand: RandomGenerator): EntityId = {
+  def updateEntityId(record: Record[DistortedValue],
+                     entities: mutable.LongMap[Entity],
+                     entityInvertedIndex: EntityInvertedIndex,
+                     recordsCache: RecordsCache)
+                    (implicit rand: RandomGenerator): EntityId = {
 
     val (possibleEntityIds, obsDistNonConstAttrIds) = getPossibleEntities(record, entities.keysIterator,
       entityInvertedIndex, recordsCache.indexedAttributes)
@@ -523,12 +523,12 @@ object GibbsUpdates {
     DiscreteDist(valuesWeights)
   }
 
-  def drawEntityValueCollapsed(attrId: AttributeId,
-                               indexedAttribute: IndexedAttribute,
-                               records: Array[Record[DistortedValue]],
-                               linkedRowIds: Traversable[Int],
-                               distProbs: DistortionProbs)
-                              (implicit rand: RandomGenerator): ValueId = {
+  def updateEntityValueCollapsed(attrId: AttributeId,
+                                 indexedAttribute: IndexedAttribute,
+                                 records: Array[Record[DistortedValue]],
+                                 linkedRowIds: Traversable[Int],
+                                 distProbs: DistortionProbs)
+                                (implicit rand: RandomGenerator): ValueId = {
     val observedLinkedRowIds = linkedRowIds.filter(rowId => records(rowId).values(attrId).value >= 0)
     val constAttribute = indexedAttribute.isConstant
     val baseDistribution = if (!constAttribute && observedLinkedRowIds.nonEmpty) {
@@ -548,11 +548,11 @@ object GibbsUpdates {
     }
   }
 
-  def drawEntityValue(attrId: AttributeId,
-                      indexedAttribute: IndexedAttribute,
-                      records: Array[Record[DistortedValue]],
-                      linkedRowIds: Traversable[Int])
-                     (implicit rand: RandomGenerator): ValueId = {
+  def updateEntityValue(attrId: AttributeId,
+                        indexedAttribute: IndexedAttribute,
+                        records: Array[Record[DistortedValue]],
+                        linkedRowIds: Traversable[Int])
+                       (implicit rand: RandomGenerator): ValueId = {
     val constAttribute = indexedAttribute.isConstant
     val baseDistribution = if (!constAttribute && linkedRowIds.nonEmpty) {
       indexedAttribute.index.getSimNormDist(linkedRowIds.size)
@@ -620,20 +620,20 @@ object GibbsUpdates {
 
   // ------------------------------------------------------------------------ //
   // Warning: updates valuesDist in-place
-  def updateEntities(records: Array[Record[DistortedValue]],
-                     linksIndex: LinksIndex,
-                     distProbs: DistortionProbs,
-                     recordsCache: RecordsCache,
-                     collapseDistortions: Boolean)
-                    (implicit rand: RandomGenerator): mutable.LongMap[Entity] = {
+  def updateEntityValues(records: Array[Record[DistortedValue]],
+                         linksIndex: LinksIndex,
+                         distProbs: DistortionProbs,
+                         recordsCache: RecordsCache,
+                         collapseDistortions: Boolean)
+                        (implicit rand: RandomGenerator): mutable.LongMap[Entity] = {
     val newEntities = mutable.LongMap.empty[Entity] // TODO: use builder?
     linksIndex.toIterator.foreach { case (entId, linkedRowIds) =>
       val entityValues = Array.tabulate(recordsCache.numAttributes) { attrId =>
         val indexedAttribute = recordsCache.indexedAttributes(attrId)
         if (collapseDistortions) {
-          drawEntityValueCollapsed(attrId, indexedAttribute, records, linkedRowIds, distProbs)
+          updateEntityValueCollapsed(attrId, indexedAttribute, records, linkedRowIds, distProbs)
         } else {
-          drawEntityValue(attrId, indexedAttribute, records, linkedRowIds)
+          updateEntityValue(attrId, indexedAttribute, records, linkedRowIds)
         }
       }
       newEntities += (entId -> Entity(entId, entityValues))

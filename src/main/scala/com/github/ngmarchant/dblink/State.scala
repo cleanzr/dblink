@@ -22,7 +22,7 @@ package com.github.ngmarchant.dblink
 import java.io.{FileInputStream, FileOutputStream, ObjectInputStream, ObjectOutputStream}
 
 import com.github.ngmarchant.dblink.util.HardPartitioner
-import com.github.ngmarchant.dblink.GibbsUpdates.{drawDistProbs, updatePartitions, updateSummaryVariables}
+import com.github.ngmarchant.dblink.GibbsUpdates.{updateDistProbs, updatePartitions, updateSummaryVariables}
 import com.github.ngmarchant.dblink.partitioning.PartitionFunction
 import org.apache.commons.math3.random.{MersenneTwister, RandomGenerator}
 import org.apache.spark.broadcast.Broadcast
@@ -69,7 +69,7 @@ case class State(iteration: Long,
   def nextState(checkpoint: Boolean,
                 collapseDistortions: Boolean = true): State = {
     /** Update distortion probabilities and broadcast */
-    val newDistProbs = drawDistProbs(summaryVars, bcRecordsCache.value)
+    val newDistProbs = updateDistProbs(summaryVars, bcRecordsCache.value)
     val bcDistProbs = partitions.sparkContext.broadcast(newDistProbs)
 
     val newPartitions = updatePartitions(iteration, partitions, bcDistProbs,
