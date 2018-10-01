@@ -170,36 +170,54 @@ object State {
                     randomSeed: Long): State = {
     /** Parse records and build the cache */
     val recordsCache = RecordsCache(records, attributeSpecs, parameters.maxClusterSize)
-    val transformedRecords = recordsCache.transformRecords(records)
-    transformedRecords.persist(StorageLevel.MEMORY_AND_DISK_SER)
-
-    /** Initialize partitioner */
-    val recordValues = transformedRecords.map(_.values)
-    partitionFunction.fit(recordValues)
-    val partitioner = new HardPartitioner(partitionFunction.numPartitions)
 
     /** Broadcast to executors */
     val sc = records.sparkContext
     val bcRecordsCache = sc.broadcast(recordsCache)
-    val bcPartitionFunction = sc.broadcast(partitionFunction)
     val bcParameters = sc.broadcast(parameters)
 
     /** Initialize the partitions of entity-record pairs.
-      * - links: each record is linked to a separate entity
+      * - links: each record is linked to a unique entity
       * - distortion: no distortion
-      * - entity values: copied directly from the records
+      * - entity values: copied directly from the records (missing generated randomly)
       */
-    val partitions = transformedRecords
-      .zipWithUniqueId()
-      .map {case (Record(id, fileId, values), entId: EntityId) =>
-        val distValues = values.map(DistortedValue(_, distorted = false))
-        val entity = Entity(entId, values)
-        val newRecord = Record[DistortedValue](id, fileId, distValues)
-        EntRecPair(entity, Some(newRecord))
-      }
-      .keyBy(pair => bcPartitionFunction.value.getPartitionId(pair.entity.values))
+    val entRecPairs = recordsCache.transformRecords(records) // map string attribute values to integer ids
+      .zipWithUniqueId()                                     // a unique entity id for each record
+      .mapPartitionsWithIndex((partId, partition) => {       // generate latent variables
+        /** Ensure we get different pseudo-random numbers on each partition */
+        implicit val rand: RandomGenerator = new MersenneTwister()
+        val newSeed = partId + randomSeed
+        rand.setSeed(newSeed.longValue())
+
+        /** Ensure attribute distributions reference the RandomGenerator */
+        bcRecordsCache.value.setRand(rand)
+        val indexedAttributes = bcRecordsCache.value.indexedAttributes
+
+        partition.map { case (Record(id, fileId, values), entId: EntityId) =>
+          val distValues = values.map(DistortedValue(_, distorted = false))
+          /** Use record attribute values, replacing any missing ones by
+            * randomly-generated values */
+          val entValues = (values, indexedAttributes).zipped.map {
+            case (valueId, _) if valueId >= 0 => valueId
+            case (_, IndexedAttribute(_, _, _, index)) =>  index.draw()
+          }
+          val entity = Entity(entId, entValues)
+          val newRecord = Record[DistortedValue](id, fileId, distValues)
+          EntRecPair(entity, Some(newRecord))
+        }
+      }, true)
+    entRecPairs.persist(StorageLevel.MEMORY_AND_DISK_SER)
+
+    /** Initialize partitioner */
+    val entityValues = entRecPairs.map(_.entity.values)
+    partitionFunction.fit(entityValues)
+    val partitioner = new HardPartitioner(partitionFunction.numPartitions)
+    val bcPartitionFunction = sc.broadcast(partitionFunction)
+
+    /** Apply partitioner to entity-record pairs */
+    val partitions = entRecPairs.keyBy(pair => bcPartitionFunction.value.getPartitionId(pair.entity.values))
       .partitionBy(partitioner)
-    transformedRecords.unpersist()
+    entRecPairs.unpersist()
 
     /** Initialize the distortion probabilities (based on the prior hyperparameters) */
     val distProbs = DistortionProbs(recordsCache.fileSizes.keys, recordsCache.distortionPrior)
