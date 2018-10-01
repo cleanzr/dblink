@@ -93,10 +93,8 @@ object RecordsCache extends Logging {
     /** Get file and value counts in a single foreach action */
     records.foreach { case Record(_, fileId, values) =>
       accFileSizes.add((fileId, 1L))
-      var i = 0
-      while (i < values.length) {
-        accValueCounts(i).add(values(i), 1L)
-        i += 1
+      values.zipWithIndex.foreach { case (value, attrId) =>
+        if (value != null) accValueCounts(attrId).add(value, 1L)
       }
     }
 
@@ -121,8 +119,9 @@ object RecordsCache extends Logging {
 
     records.mapPartitions { partition =>
       partition.map { record =>
-        val mappedValues = (record.values, indexedAttributes).zipped.map { case (stringValue, IndexedAttribute(_, _, _, index)) =>
-          index.valueIdxOf(stringValue)
+        val mappedValues = record.values.zipWithIndex.map { case (stringValue, attrId) =>
+          if (stringValue != null) indexedAttributes(attrId).index.valueIdxOf(stringValue)
+          else -1
         }
         Record[ValueId](record.id, record.fileId, mappedValues)
       }
