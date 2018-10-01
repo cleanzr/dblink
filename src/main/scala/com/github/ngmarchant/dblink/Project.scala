@@ -20,7 +20,7 @@
 package com.github.ngmarchant.dblink
 
 import SimilarityFn.{ConstantSimilarityFn, LevenshteinSimilarityFn}
-import com.github.ngmarchant.dblink.analysis.{Clusters, LinkageChain}
+import com.github.ngmarchant.dblink.analysis.Clusters
 import partitioning.{KDTreePartitioner, PartitionFunction}
 import com.typesafe.config.{Config, ConfigException, ConfigObject}
 import org.apache.hadoop.fs.{FileSystem, Path}
