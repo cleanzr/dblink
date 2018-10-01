@@ -202,6 +202,7 @@ object Project {
       spark.read.format("csv")
         .option("header", "true")
         .option("mode", "DROPMALFORMED")
+        .option("nullValue", config.getString("dblink.nullValue"))
         .load(config.getString("dblink.dataPath"))
     }
 
