@@ -238,14 +238,16 @@ object GibbsUpdates {
               recDistortion += 1
               accumulators.aggDistortions.add(((attrId, record.fileId), 1L))
               val attribute = indexedAttributes(attrId)
-              val prob = if (attribute.isConstant) {
-                attribute.index.probabilityOf(recValue)
-              } else {
-                val entValue = entity.values(attrId)
-                attribute.index.probabilityOf(recValue) *
-                  attribute.index.simNormalizationOf(entValue) *
-                  attribute.index.expSimOf(recValue, entValue)
-              }
+              val prob = if (recValue >= 0) {
+                if (attribute.isConstant) {
+                  attribute.index.probabilityOf(recValue)
+                } else {
+                  val entValue = entity.values(attrId)
+                  attribute.index.probabilityOf(recValue) *
+                    attribute.index.simNormalizationOf(entValue) *
+                    attribute.index.expSimOf(recValue, entValue)
+                }
+              } else 1.0
               accumulators.logLikelihood.add(log(prob))
             }
             if (thisEntityUnseen) {
@@ -333,25 +335,31 @@ object GibbsUpdates {
                        (implicit rand: RandomGenerator): Record[DistortedValue] = {
     val newValues = Array.tabulate(record.values.length) { attrId =>
       val distRecValue = record.values(attrId)
-      val entValue = entity.values(attrId)
-      val indexedAttribute = indexedAttributes(attrId)
-      if (distRecValue.value == entValue) {
-        // Record and entity attribute values agree, so draw distortion indicator randomly
-        val recValue = distRecValue.value
+      if (distRecValue.value < 0) {
+        // Record attribute is unobserved
         val distProb = distProbs(attrId, record.fileId)
-        val pr1 = if (indexedAttribute.isConstant) {
-          distProb * indexedAttribute.index.probabilityOf(recValue)
-        } else {
-          distProb * indexedAttribute.index.probabilityOf(recValue) *
-            indexedAttribute.index.simNormalizationOf(recValue) *
-            indexedAttribute.index.expSimOf(recValue, recValue)
-        }
-        val pr0 = 1.0 - distProb
-        val p = if (pr1 + pr0 != 0.0) pr1 / (pr1 + pr0) else 0.0
-        distRecValue.copy(distorted = rand.nextDouble() < p) // bernoulli draw
+        distRecValue.copy(distorted = rand.nextDouble() < distProb)
       } else {
-        // Record and entity attribute values disagree, so attribute is distorted with certainty
-        distRecValue.copy(distorted = true)
+        // Record attribute is observed
+        if (distRecValue.value == entity.values(attrId)) {
+          // Record and entity attribute values agree, so draw distortion indicator randomly
+          val indexedAttribute = indexedAttributes(attrId)
+          val recValue = distRecValue.value
+          val distProb = distProbs(attrId, record.fileId)
+          val pr1 = if (indexedAttribute.isConstant) {
+            distProb * indexedAttribute.index.probabilityOf(recValue)
+          } else {
+            distProb * indexedAttribute.index.probabilityOf(recValue) *
+              indexedAttribute.index.simNormalizationOf(recValue) *
+              indexedAttribute.index.expSimOf(recValue, recValue)
+          }
+          val pr0 = 1.0 - distProb
+          val p = if (pr1 + pr0 != 0.0) pr1 / (pr1 + pr0) else 0.0
+          distRecValue.copy(distorted = rand.nextDouble() < p) // bernoulli draw
+        } else {
+          // Record and entity attribute values disagree, so attribute is distorted with certainty
+          distRecValue.copy(distorted = true)
+        }
       }
     }
     record.copy(values = newValues)
@@ -391,16 +399,19 @@ object GibbsUpdates {
                    recordsCache: RecordsCache)
                   (implicit rand: RandomGenerator): EntityId = {
 
-    val (possibleEntityIds, distNonConstAttrIds) = getPossibleEntities(record,
-      entities.keysIterator, entityInvertedIndex,
-      recordsCache.indexedAttributes)
+    val (possibleEntityIds, obsDistNonConstAttrIds) = getPossibleEntities(record, entities.keysIterator,
+      entityInvertedIndex, recordsCache.indexedAttributes)
 
-    if (distNonConstAttrIds.isEmpty) {
+    if (obsDistNonConstAttrIds.isEmpty) {
+      /** No observed, distorted, non-constant record attributes implies distribution over possible entity
+        * ids is uniform */
       val uniformIdx = rand.nextInt(possibleEntityIds.length)
       possibleEntityIds(uniformIdx)
     } else {
+      /** Some observed, distorted, non-constant record attributes implies distribution over possible entity
+        * ids is non-uniform */
       val weights = possibleEntityIds.map { entId =>
-        distNonConstAttrIds.foldLeft(1.0) { (weight, attrId) =>
+        obsDistNonConstAttrIds.foldLeft(1.0) { (weight, attrId) =>
           val entValue = entities(entId).values(attrId)
           val distRecValue = record.values(attrId)
           val attributeIndex = recordsCache.indexedAttributes(attrId).index
@@ -418,18 +429,20 @@ object GibbsUpdates {
                           indexedAttributes: IndexedSeq[IndexedAttribute]):
       (IndexedSeq[EntityId], Seq[AttributeId]) = {
 
-    /** Keep track of any distorted attributes with a non-constant similarity fn */
-    val distNonConstAttrIds = mutable.ArrayBuffer.empty[AttributeId]
+    /** Keep track of any observed, distorted record attributes with a non-constant similarity fn */
+    val obsDistNonConstAttrIds = mutable.ArrayBuffer.empty[AttributeId]
 
-    /** Build an array of sets of entity ids (one set for each non-distorted attribute) */
+    /** Build an array of sets of entity ids (one set for each observed, non-distorted record attribute) */
     val bSets = Array.newBuilder[scala.collection.Set[EntityId]]
     var attrId = 0
     while (attrId < indexedAttributes.length) {
       val distRecValue = record.values(attrId)
-      if (!distRecValue.distorted) {
-        bSets += entityInvertedIndex.getEntityIds(attrId, distRecValue.value)
-      } else {
-        if (!indexedAttributes(attrId).isConstant) distNonConstAttrIds += attrId
+      if (distRecValue.value >= 0) { // Record attribute is observed
+        if (!distRecValue.distorted) { // Record attribute is not distorted
+          bSets += entityInvertedIndex.getEntityIds(attrId, distRecValue.value)
+        } else if (!indexedAttributes(attrId).isConstant) { // Record attribute is distorted and non-constant
+          obsDistNonConstAttrIds += attrId
+        }
       }
       attrId += 1
     }
@@ -440,11 +453,11 @@ object GibbsUpdates {
 
     /** Now compute the multiple set intersection, but first handle special cases */
     if (sets.isEmpty) {
-      /** All of the attributes are distorted, so return all entity ids as possibilities */
-      (allEntityIds.toIndexedSeq, distNonConstAttrIds)
+      /** All of the record attributes are distorted or unobserved, so return all entity ids as possibilities */
+      (allEntityIds.toIndexedSeq, obsDistNonConstAttrIds)
     } else if (sets.length == 1) {
       /** No need to compute intersection for a single set */
-      (sets.head.toIndexedSeq, distNonConstAttrIds)
+      (sets.head.toIndexedSeq, obsDistNonConstAttrIds)
     } else {
       /** ArrayBuffer to store result of the multiple set intersection */
       var result = mutable.ArrayBuffer.empty[EntityId]
@@ -466,7 +479,7 @@ object GibbsUpdates {
         i += 1
       }
 
-      (result, distNonConstAttrIds)
+      (result, obsDistNonConstAttrIds)
     }
   }
 
@@ -474,15 +487,15 @@ object GibbsUpdates {
                               constAttr: Boolean,
                               attributeIndex: AttributeIndex,
                               records: Array[Record[DistortedValue]],
-                              linkedRowIds: Iterator[Int],
+                              observedLinkedRowIds: Iterator[Int],
                               distProbs: DistortionProbs,
                               baseDistribution: DiscreteDist[ValueId])
                              (implicit rand: RandomGenerator): DiscreteDist[ValueId] = {
 
     val valuesWeights = mutable.HashMap.empty[ValueId, Double]
 
-    while (linkedRowIds.hasNext) {
-      val rowId = linkedRowIds.next()
+    while (observedLinkedRowIds.hasNext) {
+      val rowId = observedLinkedRowIds.next()
       val record = records(rowId)
       val distProb = distProbs(attrId, record.fileId)
       val distRecValue = record.values(attrId)
@@ -490,16 +503,16 @@ object GibbsUpdates {
 
       if (constAttr) {
         val weight = 1.0 + (1.0 / distProb - 1.0) / recValueProb
-        // If key already exists, do a multiplicative update, otherwise
-        // add a new key with value `weight`
+        /** If key already exists, do a multiplicative update, otherwise
+          * add a new key with value `weight` */
         valuesWeights.update(distRecValue.value, weight * valuesWeights.getOrElse(distRecValue.value, 1.0))
       } else {
         val recValueNorm = attributeIndex.simNormalizationOf(distRecValue.value)
-        // Iterate over values close to `valueId`
+        /** Iterate over values similar to record value */
         attributeIndex.simValuesOf(distRecValue.value).foreach { case (simValue, expSim) =>
           val weight = if (distRecValue.value == simValue) expSim + (1.0 / distProb - 1.0) / (recValueProb * recValueNorm) else expSim
-          // If key already exists, do a multiplicative update, otherwise
-          // add a new key with value `weight`
+          /** If key already exists, do a multiplicative update, otherwise
+            * add a new key with value `weight` */
           valuesWeights.update(simValue, weight * valuesWeights.getOrElse(simValue, 1.0))
         }
       }
@@ -516,16 +529,17 @@ object GibbsUpdates {
                                linkedRowIds: Traversable[Int],
                                distProbs: DistortionProbs)
                               (implicit rand: RandomGenerator): ValueId = {
+    val observedLinkedRowIds = linkedRowIds.filter(rowId => records(rowId).values(attrId).value >= 0)
     val constAttribute = indexedAttribute.isConstant
-    val baseDistribution = if (!constAttribute && linkedRowIds.nonEmpty) {
-      indexedAttribute.index.getSimNormDist(linkedRowIds.size)
+    val baseDistribution = if (!constAttribute && observedLinkedRowIds.nonEmpty) {
+      indexedAttribute.index.getSimNormDist(observedLinkedRowIds.size)
     } else indexedAttribute.index.distribution
 
-    if (linkedRowIds.isEmpty) {
+    if (observedLinkedRowIds.isEmpty) {
       baseDistribution.sample()
     } else {
       val perturbDistribution = perturbedDistYCollapsed(attrId, constAttribute,
-        indexedAttribute.index, records, linkedRowIds.toIterator, distProbs, baseDistribution)
+        indexedAttribute.index, records, observedLinkedRowIds.toIterator, distProbs, baseDistribution)
       if (rand.nextDouble() < 1.0/(1.0 + perturbDistribution.totalWeight)) {
         baseDistribution.sample()
       } else {
@@ -547,20 +561,20 @@ object GibbsUpdates {
     if (linkedRowIds.isEmpty) {
       baseDistribution.sample()
     } else {
-      /** Search for a non-distorted value */
+      /** Search for an observed, non-distorted value */
       var nonDistortedValue: ValueId = -1
       val itLinkedRowIds = linkedRowIds.toIterator
       while (itLinkedRowIds.hasNext && nonDistortedValue < 0) {
         val rowId = itLinkedRowIds.next()
         val distRecValue = records(rowId).values(attrId)
-        if (!distRecValue.distorted) nonDistortedValue = distRecValue.value
+        if (!distRecValue.distorted && distRecValue.value >= 0) nonDistortedValue = distRecValue.value
       }
 
       if (nonDistortedValue >= 0) {
-        /** Non-distorted value exists, so the new value is determined */
+        /** Observed, non-distorted value exists, so the new value is determined */
         nonDistortedValue
       } else {
-        /** All linked record values are distorted for this attribute. */
+        /** All linked record values are distorted or unobserved for this attribute. */
         if (constAttribute) {
           baseDistribution.sample()
         } else {
@@ -589,11 +603,13 @@ object GibbsUpdates {
       val rowId = linkedRowIds.next()
       val distRecValue = records(rowId).values(attrId)
 
-      // Iterate over values close to `valueId`
-      attributeIndex.simValuesOf(distRecValue.value).foreach { case (simValue, expSim) =>
-        // If key already exists, do a multiplicative update, otherwise
-        // add a new key with value `weight`
-        valuesWeights.update(simValue, expSim * valuesWeights.getOrElse(simValue, 1.0))
+      if (distRecValue.value >= 0) { // Record value is observed
+        /** Iterate over values similar to record value */
+        attributeIndex.simValuesOf(distRecValue.value).foreach { case (simValue, expSim) =>
+          /** If key already exists, do a multiplicative update, otherwise
+            * add a new key with value `expSim` */
+          valuesWeights.update(simValue, expSim * valuesWeights.getOrElse(simValue, 1.0))
+        }
       }
     }
 
