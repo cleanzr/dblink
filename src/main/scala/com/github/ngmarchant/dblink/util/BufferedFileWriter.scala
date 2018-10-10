@@ -19,10 +19,10 @@ case class BufferedFileWriter(path: String,
     /** Hadoop doesn't support append on a ChecksumFilesystem.
       * Get around this limitation by writing to a temporary new file and
       * merging with the old file on .close() */
-    partsDir = new Path(path + "-PARTS/")
+    partsDir = new Path(path + "-PARTS")
     hdfs.mkdirs(partsDir) // dir for new and old parts
-    hdfs.rename(file, new Path(partsDir.toString + "/PART0.csv")) // move old part into dir
-    hdfs.create(new Path(partsDir.toString + "/PART1.csv"), true, 4*1024, _progress)
+    hdfs.rename(file, new Path(partsDir.toString + Path.SEPARATOR + "PART0.csv")) // move old part into dir
+    hdfs.create(new Path(partsDir.toString + Path.SEPARATOR + "PART1.csv"), true, 4*1024, _progress)
   } else {
     hdfs.create(file, true, 4*1024, _progress)
   }
