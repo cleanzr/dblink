@@ -19,6 +19,7 @@
 
 package com.github.ngmarchant.dblink
 
+import com.github.ngmarchant.dblink.util.PeriodicRDDCheckpointer
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
@@ -43,7 +44,7 @@ object Sampler extends Logging {
              savePath: String,
              burninInterval: Int = 0,
              thinningInterval: Int = 1,
-             checkpointInterval: Int = 10,
+             checkpointInterval: Int = 50,
              writeBufferSize: Int = 10,
              collapsedEntityIds: Boolean = false,
              collapsedEntityValues: Boolean = true): State = {
@@ -74,11 +75,13 @@ object Sampler extends Logging {
       diagnosticsWriter.writeRow(state)
     }
 
+    val cp = new PeriodicRDDCheckpointer[(PartitionId, EntRecPair)](checkpointInterval, sc)
+
     if (burninInterval > 0) info(s"Running burn-in for $burninInterval iterations.")
     while (sampleCtr < sampleSize) {
       val completedIterations = state.iteration - startIteration
 
-      state = state.nextState(checkpoint = state.iteration%checkpointInterval == 0, collapsedEntityIds, collapsedEntityValues)
+      state = state.nextState(checkpointer = cp, collapsedEntityIds, collapsedEntityValues)
       //newState.partitions.persist(StorageLevel.MEMORY_ONLY_SER)
       //state.partitions.unpersist()
       //state = newState

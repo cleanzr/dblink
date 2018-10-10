@@ -21,7 +21,7 @@ package com.github.ngmarchant.dblink
 
 import java.io.{FileInputStream, FileOutputStream, ObjectInputStream, ObjectOutputStream}
 
-import com.github.ngmarchant.dblink.util.HardPartitioner
+import com.github.ngmarchant.dblink.util.{HardPartitioner, PeriodicRDDCheckpointer}
 import com.github.ngmarchant.dblink.GibbsUpdates.{updateDistProbs, updatePartitions, updateSummaryVariables}
 import com.github.ngmarchant.dblink.partitioning.PartitionFunction
 import org.apache.commons.math3.random.{MersenneTwister, RandomGenerator}
@@ -61,12 +61,12 @@ case class State(iteration: Long,
 
   /** Applies a Markov transition operator to the given state
     *
-    * @param checkpoint whether to checkpoint the RDD.
+    * @param checkpointer whether to checkpoint the RDD.
     * @param collapsedEntityIds whether to do a partially-collapsed update for the entity ids (default: false)
     * @param collapsedEntityValues whether to do a partially-collapsed update for the entity values (default: true)
     * @return new State after applying the transition operator.
     */
-  def nextState(checkpoint: Boolean,
+  def nextState(checkpointer: PeriodicRDDCheckpointer[(PartitionId, EntRecPair)],
                 collapsedEntityIds: Boolean = false,
                 collapsedEntityValues: Boolean = true): State = {
     /** Update distortion probabilities and broadcast */
@@ -77,7 +77,7 @@ case class State(iteration: Long,
       partitioner, randomSeed, bcPartitionFunction, bcRecordsCache, collapsedEntityIds, collapsedEntityValues)
     /** If handling persistence here, may want to set this:
       * .persist(StorageLevel.MEMORY_ONLY_SER) */
-    if (checkpoint) newPartitions.checkpoint()
+    checkpointer.update(newPartitions)
     val newSummaryVariables = updateSummaryVariables(newPartitions, accumulators,
       bcDistProbs, bcRecordsCache)
     bcDistProbs.destroy()
