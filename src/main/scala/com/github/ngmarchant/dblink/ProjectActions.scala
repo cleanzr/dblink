@@ -19,7 +19,7 @@
 
 package com.github.ngmarchant.dblink
 
-import ProjectAction.{EvaluateAction, SampleAction, SummarizeAction}
+import ProjectAction.{CopyFilesAction, EvaluateAction, SampleAction, SummarizeAction}
 import com.typesafe.config.{Config, ConfigException}
 import Project.toConfigTraversable
 
@@ -70,6 +70,13 @@ object ProjectActions {
           new SummarizeAction(project,
             lowerIterationCutoff = Try {action.getInt("parameters.lowerIterationCutoff")} getOrElse 0,
             quantities = action.getStringList("parameters.quantities").asScala
+          )
+        case "copy-files" =>
+          new CopyFilesAction(project,
+            fileNames = action.getStringList("parameters.fileNames").asScala,
+            destinationPath = action.getString("parameters.destinationPath"),
+            overwrite = Try {action.getBoolean("parameters.overwrite")} getOrElse false,
+            deleteSource = Try {action.getBoolean("parameters.deleteSource")} getOrElse false
           )
         case _ => throw new ConfigException.BadValue(config.origin(), "name", "unsupported action")
       }

@@ -20,6 +20,7 @@
 package com.github.ngmarchant.dblink
 
 import com.github.ngmarchant.dblink.analysis.{ClusteringMetrics, PairwiseMetrics}
+import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 
 trait ProjectAction {
   def execute(): Unit
@@ -135,6 +136,28 @@ object ProjectAction {
 
     override def mkString: String = {
       s"SummarizeAction: Calculating summary quantities ${quantities.map("'" + _ + "'").mkString("[", ",", "]")} along the chain for iterations >= $lowerIterationCutoff"
+    }
+  }
+
+  class CopyFilesAction(project: Project, fileNames: Traversable[String], destinationPath: String,
+                        overwrite: Boolean, deleteSource: Boolean) extends ProjectAction {
+
+    override def execute(): Unit = {
+      val conf = project.sparkContext.hadoopConfiguration
+      val srcParent = new Path(project.outputPath)
+      val srcFs = FileSystem.get(srcParent.toUri, conf)
+      val dstParent = new Path(destinationPath)
+      val dstFs = FileSystem.get(dstParent.toUri, conf)
+      fileNames.map(fName => new Path(srcParent.toString + Path.SEPARATOR + fName))
+        .filter(srcFs.exists)
+        .foreach { src =>
+          val dst = new Path(dstParent.toString + Path.SEPARATOR + src.getName)
+          FileUtil.copy(srcFs, src, dstFs, dst, deleteSource, overwrite, conf)
+        }
+    }
+
+    override def mkString: String = {
+      s"CopyFilesAction: Copying ${fileNames.mkString("{",", ","}")} to destination $destinationPath"
     }
   }
 }
