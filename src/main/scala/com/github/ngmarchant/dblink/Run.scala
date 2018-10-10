@@ -21,16 +21,20 @@ package com.github.ngmarchant.dblink
 
 import java.io.File
 
+import com.github.ngmarchant.dblink.util.PathToFileConverter
 import com.typesafe.config.ConfigFactory
 import org.apache.spark.sql.SparkSession
+import org.apache.hadoop.fs.Path
 
 object Run extends App with Logging {
-
-  val config = ConfigFactory.parseFile(new File(args.head)).resolve()
 
   val spark = SparkSession.builder().appName("dblink").getOrCreate()
   val sc = spark.sparkContext
   sc.setLogLevel("WARN")
+
+  val configFile = PathToFileConverter.fileToPath(new Path(args.head), sc.hadoopConfiguration)
+
+  val config = ConfigFactory.parseFile(configFile).resolve()
 
   val project = Project(config)
   println(project.mkString)
