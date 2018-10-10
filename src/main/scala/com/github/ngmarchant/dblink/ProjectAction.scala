@@ -30,6 +30,7 @@ trait ProjectAction {
 object ProjectAction {
   private val supportedSamplers = Set("PCG-I", "PCG-II", "Gibbs")
   private val supportedEvaluationMetrics = Set("pairwise", "cluster")
+  private val supportedSummaryQuantities = Set("cluster-size-distribution", "partition-sizes")
 
   class SampleAction(project: Project, sampleSize: Int, burninInterval: Int,
                      thinningInterval: Int, resume: Boolean, sampler: String) extends ProjectAction {
@@ -45,9 +46,9 @@ object ProjectAction {
         project.generateInitialState
       }
       sampler match {
-        case "PCG-I" => Sampler.sample(initialState, sampleSize, project.projectPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = false, collapsedEntityValues = true)
-        case "PCG-II" => Sampler.sample(initialState, sampleSize, project.projectPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = true, collapsedEntityValues = true)
-        case "Gibbs" => Sampler.sample(initialState, sampleSize, project.projectPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = false, collapsedEntityValues = false)
+        case "PCG-I" => Sampler.sample(initialState, sampleSize, project.outputPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = false, collapsedEntityValues = true)
+        case "PCG-II" => Sampler.sample(initialState, sampleSize, project.outputPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = true, collapsedEntityValues = true)
+        case "Gibbs" => Sampler.sample(initialState, sampleSize, project.outputPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = false, collapsedEntityValues = false)
       }
     }
 
@@ -61,6 +62,7 @@ object ProjectAction {
                        useExistingSMPC: Boolean) extends ProjectAction {
     require(project.entIdAttribute.isDefined, "Ground truth entity ids are required for evaluation")
     require(lowerIterationCutoff >=0, "lowerIterationCutoff must be non-negative")
+    require(metrics.nonEmpty, "metrics must be non-empty")
     require(metrics.forall(m => supportedEvaluationMetrics.contains(m)), s"metrics must be one of ${supportedEvaluationMetrics.mkString("", ",", "")}.")
 
     override def execute(): Unit = {
@@ -83,7 +85,7 @@ object ProjectAction {
         project.getSavedLinkageChain(lowerIterationCutoff) match {
           case Some(chain) =>
             val sMPC = chain.sharedMostProbableClusters.persist()
-            sMPC.saveCsv(project.projectPath + "sharedMostProbableClusters.csv")
+            sMPC.saveCsv(project.outputPath + "sharedMostProbableClusters.csv")
             chain.unpersist()
             Some(sMPC)
           case None =>
@@ -114,6 +116,8 @@ object ProjectAction {
   class SummarizeAction(project: Project, lowerIterationCutoff: Int,
                         quantities: Traversable[String]) extends ProjectAction {
     require(lowerIterationCutoff >= 0, "lowerIterationCutoff must be non-negative")
+    require(quantities.nonEmpty, "quantities must be non-empty")
+    require(quantities.forall(q => supportedSummaryQuantities.contains(q)), s"quantities must be one of ${supportedSummaryQuantities.mkString("", ",", "")}.")
 
     override def execute(): Unit = {
       import com.github.ngmarchant.dblink.analysis.implicits._
@@ -121,8 +125,8 @@ object ProjectAction {
         case Some(chain) =>
           chain.persist()
           quantities.foreach {
-            case quantity if quantity == "cluster-size-distribution" => chain.clusterSizeDistribution(project.projectPath)
-            case quantity => sys.error(s"skipping unknown quantity '$quantity'")
+            case "cluster-size-distribution" => chain.saveClusterSizeDistribution(project.outputPath)
+            case "partition-sizes" => chain.savePartitionSizes(project.outputPath)
           }
           chain.unpersist()
         case None => sys.error("no linkage chain")

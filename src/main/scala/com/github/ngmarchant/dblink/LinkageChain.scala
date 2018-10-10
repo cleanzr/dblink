@@ -23,6 +23,7 @@ import com.github.ngmarchant.dblink.util.BufferedFileWriter
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
+import com.github.ngmarchant.dblink.LinkageChain._
 
 import scala.collection.mutable
 
@@ -37,8 +38,7 @@ class LinkageChain(val rdd: RDD[LinkageState]) extends Logging {
     *         cluster (as a set of recIds) and the relative frequency of
     *         occurence (along the chain).
     */
-  lazy val mostProbableClusters: RDD[(RecordId, (Cluster, Double))] =
-    _mostProbableClusters(rdd, numSamples)
+  lazy val mostProbableClusters: RDD[(RecordId, (Cluster, Double))] = _mostProbableClusters(rdd, numSamples)
 
   /** Computes the shared most probable clusters
     * TODO: description
@@ -51,7 +51,7 @@ class LinkageChain(val rdd: RDD[LinkageState]) extends Logging {
     *
     * @param path path to working directory
     */
-  def clusterSizeDistribution(path: String): Unit = {
+  def saveClusterSizeDistribution(path: String): Unit = {
     val sc = rdd.sparkContext
 
     /** Compute dist separately for each partition, then combine the results */
@@ -97,6 +97,13 @@ class LinkageChain(val rdd: RDD[LinkageState]) extends Logging {
     }
     writer.close()
   }
+
+  /** Computes the sizes of the partitions along the chain and saves the result to
+    * `partitionSizes.csv` in the working directory.
+    *
+    * @param path path to working directory
+    */
+  def savePartitionSizes(path: String): Unit = _partitionSizes(rdd, path)
 }
 
 object LinkageChain {
@@ -117,7 +124,7 @@ object LinkageChain {
       .rdd
   }
 
-  def _mostProbableClusters(rdd: RDD[LinkageState], numSamples: Long): RDD[(RecordId, (Cluster, Double))] = {
+  private def _mostProbableClusters(rdd: RDD[LinkageState], numSamples: Long): RDD[(RecordId, (Cluster, Double))] = {
     rdd
       .flatMap(_.linkageStructure.iterator.collect {case (_, recIds) if recIds.nonEmpty => (recIds.toSet, 1.0/numSamples)})
       .reduceByKey(_ + _)
@@ -128,7 +135,7 @@ object LinkageChain {
     // for each recId keep only the row with the highest freq (most probable cluster)
   }
 
-  def _sharedMostProbableClusters(mpClusters: RDD[(RecordId, (Cluster, Double))]): RDD[Cluster] = {
+  private def _sharedMostProbableClusters(mpClusters: RDD[(RecordId, (Cluster, Double))]): RDD[Cluster] = {
     mpClusters.map { case (recId, (mpCluster, _)) => (mpCluster, recId) }
       // key = most probable cluster | value = recId
       .aggregateByKey(zeroValue = Set.empty[RecordId])(
@@ -146,7 +153,7 @@ object LinkageChain {
     //      }
   }
 
-  def partitionSizes(rdd: RDD[LinkageState], path: String): Unit = {
+  private def _partitionSizes(rdd: RDD[LinkageState], path: String): Unit = {
     val sc = rdd.sparkContext
     val partSizesAlongChain = rdd.map(x => (x.iteration, (x.partitionId, x.linkageStructure.keySet.size)))
       .collect()
@@ -159,7 +166,6 @@ object LinkageChain {
 
     /** Output file can be created from Hadoop file system. */
     val fullPath = path + "partitionSizes.csv"
-    //info(s"Writing partition sizes along the chain to $fullPath")
     val writer = BufferedFileWriter(fullPath, append = false, sc)
 
     /** Write CSV header */

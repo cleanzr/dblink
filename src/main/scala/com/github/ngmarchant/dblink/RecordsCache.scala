@@ -33,7 +33,8 @@ import org.apache.spark.rdd.RDD
   * @param fileSizes number of records in each file
   */
 class RecordsCache(val indexedAttributes: IndexedSeq[IndexedAttribute],
-                   val fileSizes: Map[FileId, Long]) extends Serializable {
+                   val fileSizes: Map[FileId, Long],
+                   val missingCounts: Option[Map[(FileId, AttributeId), Long]] = None) extends Serializable {
   /** Set the random number generator.
     * Called at the beginning of each iteration on each executor. */
   def setRand(rand: RandomGenerator): Unit = {
@@ -83,9 +84,12 @@ object RecordsCache extends Logging {
     implicit val sc: SparkContext = records.sparkContext
     sc.register(accFileSizes, "number of records per file")
 
+    val accMissingCounts = new MapLongAccumulator[(FileId, AttributeId)]
+    sc.register(accMissingCounts, s"missing counts per file and attribute")
+
     val accValueCounts = attributeSpecs.map{ attribute =>
       val acc = new MapLongAccumulator[String]
-      sc.register(acc, s"value counts for attribute ${attribute.name}.")
+      sc.register(acc, s"value counts for attribute ${attribute.name}")
       acc
     }
 
@@ -95,21 +99,30 @@ object RecordsCache extends Logging {
       accFileSizes.add((fileId, 1L))
       values.zipWithIndex.foreach { case (value, attrId) =>
         if (value != null) accValueCounts(attrId).add(value, 1L)
+        else accMissingCounts.add(((fileId, attrId), 1L))
       }
     }
 
+    val missingCounts = accMissingCounts.value
     val fileSizes = accFileSizes.value
-    info(s"Finished gathering statistics from ${fileSizes.values.sum} records across ${fileSizes.size} file(s).")
+    val totalRecords = fileSizes.values.sum
+    val percentageMissing = 100.0 * missingCounts.values.sum / (totalRecords * attributeSpecs.size)
+    if (percentageMissing >= 0.0) {
+      info(f"Finished gathering statistics from $totalRecords records across ${fileSizes.size} file(s). $percentageMissing%.3f%% of the record attribute values are missing.")
+    } else {
+      info(s"Finished gathering statistics from $totalRecords records across ${fileSizes.size} file(s). There are no missing record attribute values.")
+    }
 
     /** Build an index for each attribute (generates a mapping from strings -> integers) */
     val indexedAttributes = attributeSpecs.zipWithIndex.map { case (attribute, attrId) =>
-      info(s"Indexing attribute '${attribute.name}'.")
-      val index = AttributeIndex(accValueCounts(attrId).value.mapValues(_.toDouble),
-        attribute.similarityFn, Some(1 to expectedMaxClusterSize))
+      val valuesWeights = accValueCounts(attrId).value.mapValues(_.toDouble)
+      info(s"Indexing attribute '${attribute.name}' with ${valuesWeights.size} unique values.")
+      val index = AttributeIndex(valuesWeights, attribute.similarityFn,
+        Some(1 to expectedMaxClusterSize))
       IndexedAttribute(attribute.name, attribute.similarityFn, attribute.distortionPrior, index)
     }
 
-    new RecordsCache(indexedAttributes, fileSizes)
+    new RecordsCache(indexedAttributes, fileSizes, Some(missingCounts))
   }
 
   private def _transformRecords(records: RDD[Record[String]],

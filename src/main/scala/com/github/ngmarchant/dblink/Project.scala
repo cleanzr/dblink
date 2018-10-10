@@ -36,7 +36,7 @@ import scala.util.Try
 /** An entity resolution project
   *
   * @param dataPath path to source records (in CSV format)
-  * @param projectPath path to project directory
+  * @param outputPath path to project directory
   * @param checkpointPath path for saving Spark checkpoints
   * @param recIdAttribute name of record identifier column in dataFrame (must be unique across all files)
   * @param fileIdAttribute name of file identifier column in dataFrame (optional)
@@ -47,7 +47,7 @@ import scala.util.Try
   * @param expectedMaxClusterSize expected size of the largest record cluster (used as a hint to improve precaching)
   * @param dataFrame data frame containing source records
   */
-case class Project(dataPath: String, projectPath: String, checkpointPath: String,
+case class Project(dataPath: String, outputPath: String, checkpointPath: String,
                    recIdAttribute: String, fileIdAttribute: Option[String],
                    entIdAttribute: Option[String], matchingAttributes: IndexedSeq[Attribute],
                    partitionFunction: PartitionFunction[ValueId], randomSeed: Long,
@@ -87,7 +87,7 @@ case class Project(dataPath: String, projectPath: String, checkpointPath: String
 
     lines += "Project settings"
     lines += "----------------"
-    lines += s"  * Saving Markov chain and complete final state to '$projectPath'"
+    lines += s"  * Saving Markov chain and complete final state to '$outputPath'"
     lines += s"  * Saving Spark checkpoints to '$checkpointPath'"
 
     lines.mkString("\n")
@@ -95,20 +95,20 @@ case class Project(dataPath: String, projectPath: String, checkpointPath: String
 
   def sharedMostProbableClustersOnDisk: Boolean = {
     val hdfs = FileSystem.get(sparkContext.hadoopConfiguration)
-    val fSMPC = new Path(projectPath + "sharedMostProbableClusters.csv")
+    val fSMPC = new Path(outputPath + "sharedMostProbableClusters.csv")
     hdfs.exists(fSMPC)
   }
 
   def savedStateOnDisk: Boolean = {
     val hdfs = FileSystem.get(sparkContext.hadoopConfiguration)
-    val fDriverState = new Path(projectPath + "driverState")
-    val fPartitionState = new Path(projectPath + "partitionsState.parquet")
+    val fDriverState = new Path(outputPath + "driverState")
+    val fPartitionState = new Path(outputPath + "partitionsState.parquet")
     hdfs.exists(fDriverState) && hdfs.exists(fPartitionState)
   }
 
   def linkageChainOnDisk: Boolean = {
     val hdfs = FileSystem.get(sparkContext.hadoopConfiguration)
-    val file = new Path(projectPath + "linkageChain.parquet")
+    val file = new Path(outputPath + "linkageChain.parquet")
     hdfs.exists(file)
   }
 
@@ -151,8 +151,8 @@ case class Project(dataPath: String, projectPath: String, checkpointPath: String
 
   def getSavedLinkageChain(lowerIterationCutoff: Int = 0): Option[RDD[LinkageState]] = {
     if (linkageChainOnDisk) {
-      val chain = if (lowerIterationCutoff == 0) LinkageChain.read(projectPath)
-        else LinkageChain.read(projectPath).filter(_.iteration >= lowerIterationCutoff)
+      val chain = if (lowerIterationCutoff == 0) LinkageChain.read(outputPath)
+        else LinkageChain.read(outputPath).filter(_.iteration >= lowerIterationCutoff)
       if (chain.isEmpty()) None
       else Some(chain)
     } else None
@@ -160,7 +160,7 @@ case class Project(dataPath: String, projectPath: String, checkpointPath: String
 
   def getSavedState: Option[State] = {
     if (savedStateOnDisk) {
-      Some(State.read(projectPath))
+      Some(State.read(outputPath))
     } else None
   }
 
@@ -182,7 +182,7 @@ case class Project(dataPath: String, projectPath: String, checkpointPath: String
 
   def getSavedSharedMostProbableClusters: Option[RDD[Cluster]] = {
     if (sharedMostProbableClustersOnDisk) {
-      Some(Clusters.readCsv(projectPath + "sharedMostProbableClusters.csv"))
+      Some(Clusters.readCsv(outputPath + "sharedMostProbableClusters.csv"))
     } else None
   }
 
@@ -212,7 +212,7 @@ object Project {
 
     Project(
       dataPath = dataPath,
-      projectPath = config.getString("dblink.projectPath"),
+      outputPath = config.getString("dblink.outputPath"),
       checkpointPath = config.getString("dblink.checkpointPath"),
       recIdAttribute = config.getString("dblink.identifierAttributes.record"),
       fileIdAttribute = Try {Some(config.getString("dblink.identifierAttributes.file"))} getOrElse None,
