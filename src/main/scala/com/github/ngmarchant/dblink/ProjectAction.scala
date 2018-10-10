@@ -38,7 +38,7 @@ object ProjectAction {
     require(sampleSize > 0, "sampleSize must be positive")
     require(burninInterval >= 0, "burninInterval must be non-negative")
     require(thinningInterval >= 0, "thinningInterval must be non-negative")
-    require(supportedSamplers.contains(sampler), s"sampler must be one of ${supportedSamplers.mkString("", ",", "")}.")
+    require(supportedSamplers.contains(sampler), s"sampler must be one of ${supportedSamplers.mkString("", ", ", "")}.")
 
     override def execute(): Unit = {
       val initialState = if (resume) {
@@ -64,7 +64,7 @@ object ProjectAction {
     require(project.entIdAttribute.isDefined, "Ground truth entity ids are required for evaluation")
     require(lowerIterationCutoff >=0, "lowerIterationCutoff must be non-negative")
     require(metrics.nonEmpty, "metrics must be non-empty")
-    require(metrics.forall(m => supportedEvaluationMetrics.contains(m)), s"metrics must be one of ${supportedEvaluationMetrics.mkString("", ",", "")}.")
+    require(metrics.forall(m => supportedEvaluationMetrics.contains(m)), s"metrics must be one of ${supportedEvaluationMetrics.mkString("{", ", ", "}")}.")
 
     override def execute(): Unit = {
       import com.github.ngmarchant.dblink.analysis.implicits._
@@ -109,8 +109,8 @@ object ProjectAction {
     }
 
     override def mkString: String = {
-      if (useExistingSMPC) s"EvaluateAction: Evaluating saved sMPC clusters using ${metrics.map("'" + _ + "'").mkString("[", ",", "]")} metrics"
-      else s"EvaluateAction: Evaluating sMPC clusters (computed from the chain for iterations >= $lowerIterationCutoff) using ${metrics.map("'" + _ + "'").mkString("[", ",", "]")} metrics"
+      if (useExistingSMPC) s"EvaluateAction: Evaluating saved sMPC clusters using ${metrics.map("'" + _ + "'").mkString("{", ", ", "}")} metrics"
+      else s"EvaluateAction: Evaluating sMPC clusters (computed from the chain for iterations >= $lowerIterationCutoff) using ${metrics.map("'" + _ + "'").mkString("{", ", ", "}")} metrics"
     }
   }
 
@@ -118,7 +118,7 @@ object ProjectAction {
                         quantities: Traversable[String]) extends ProjectAction {
     require(lowerIterationCutoff >= 0, "lowerIterationCutoff must be non-negative")
     require(quantities.nonEmpty, "quantities must be non-empty")
-    require(quantities.forall(q => supportedSummaryQuantities.contains(q)), s"quantities must be one of ${supportedSummaryQuantities.mkString("", ",", "")}.")
+    require(quantities.forall(q => supportedSummaryQuantities.contains(q)), s"quantities must be one of ${supportedSummaryQuantities.mkString("{", ", ", "}")}.")
 
     override def execute(): Unit = {
       import com.github.ngmarchant.dblink.analysis.implicits._
@@ -135,7 +135,7 @@ object ProjectAction {
     }
 
     override def mkString: String = {
-      s"SummarizeAction: Calculating summary quantities ${quantities.map("'" + _ + "'").mkString("[", ",", "]")} along the chain for iterations >= $lowerIterationCutoff"
+      s"SummarizeAction: Calculating summary quantities ${quantities.map("'" + _ + "'").mkString("{", ", ", "}")} along the chain for iterations >= $lowerIterationCutoff"
     }
   }
 
