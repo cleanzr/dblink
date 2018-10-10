@@ -19,12 +19,13 @@
 
 package com.github.ngmarchant.dblink
 
-import java.io.{FileInputStream, FileOutputStream, ObjectInputStream, ObjectOutputStream}
+import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import com.github.ngmarchant.dblink.util.{HardPartitioner, PeriodicRDDCheckpointer}
 import com.github.ngmarchant.dblink.GibbsUpdates.{updateDistProbs, updatePartitions, updateSummaryVariables}
 import com.github.ngmarchant.dblink.partitioning.PartitionFunction
 import org.apache.commons.math3.random.{MersenneTwister, RandomGenerator}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
@@ -96,9 +97,13 @@ case class State(iteration: Long,
     */
   def save(path: String): Unit = {
     // TODO: check path is valid (a directory, maybe nothing to overwrite?)
-    /** Driver variables */
-    val driverStatePath = path + "driver-state"
-    val oos = new ObjectOutputStream(new FileOutputStream(driverStatePath))
+    val sc = partitions.sparkContext
+    /** Save state of driver */
+    val driverStatePath = new Path(path + "driver-state")
+    val hdfs = FileSystem.get(sc.hadoopConfiguration)
+    val os = hdfs.create(driverStatePath)
+    val oos = new ObjectOutputStream(os)
+
     oos.writeLong(this.iteration)
     oos.writeObject(this.distProbs)
     oos.writeObject(this.summaryVars)
@@ -110,7 +115,7 @@ case class State(iteration: Long,
     oos.writeObject(this.rand)
     oos.close()
 
-    /** Save `partitions` in Parquet format */
+    /** Save state on workers (partitions) in Parquet format */
     val partitionsPath = path + "partitions-state.parquet"
     val spark = SparkSession.builder().getOrCreate()
     import spark.implicits._
@@ -127,8 +132,15 @@ object State {
     * @return a `State` object.
     */
   def read(path: String): State = {
-    val driverStatePath = path + "driver-state"
-    val ois = new ObjectInputStream(new FileInputStream(driverStatePath))
+    val spark = SparkSession.builder().getOrCreate()
+    import spark.implicits._
+    val sc = spark.sparkContext
+
+    val driverStatePath = new Path(path + "driver-state")
+    val hdfs = FileSystem.get(sc.hadoopConfiguration)
+    val is = hdfs.open(driverStatePath)
+    val ois = new ObjectInputStream(is)
+
     val iteration = ois.readLong()
     val distProbs = ois.readObject().asInstanceOf[DistortionProbs]
     val summaryVars = ois.readObject().asInstanceOf[SummaryVars]
@@ -138,10 +150,6 @@ object State {
     val partitionFunction = ois.readObject().asInstanceOf[PartitionFunction[ValueId]] // TODO: what if a partition function is a different class?
     val recordsCache = ois.readObject().asInstanceOf[RecordsCache]
     implicit val rand: RandomGenerator = ois.readObject().asInstanceOf[RandomGenerator]
-
-    val spark = SparkSession.builder().getOrCreate()
-    import spark.implicits._
-    val sc = spark.sparkContext
 
     val partitionsPath = path + "partitions-state.parquet"
     val partitions = spark.read.format("parquet")
