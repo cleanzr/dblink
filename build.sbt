@@ -24,9 +24,9 @@ useGpg := true
 
 scalaVersion := "2.11.12"
 
-val sparkVersion = "2.2.0"
+val sparkVersion = "2.3.1"
 val breezeVersion = "0.13.2"
-val commonsMathVersion = "3.6"
+val commonsMathVersion = "3.6.1"
 val scalatestVersion = "3.0.5"
 val typesafeVersion = "1.3.2"
 
