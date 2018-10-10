@@ -19,8 +19,6 @@
 
 package com.github.ngmarchant.dblink
 
-import java.io.File
-
 import com.github.ngmarchant.dblink.util.PathToFileConverter
 import com.typesafe.config.ConfigFactory
 import org.apache.spark.sql.SparkSession
