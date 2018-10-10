@@ -95,20 +95,20 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
 
   def sharedMostProbableClustersOnDisk: Boolean = {
     val hdfs = FileSystem.get(sparkContext.hadoopConfiguration)
-    val fSMPC = new Path(outputPath + "sharedMostProbableClusters.csv")
+    val fSMPC = new Path(outputPath + "shared-most-probable-clusters.csv")
     hdfs.exists(fSMPC)
   }
 
   def savedStateOnDisk: Boolean = {
     val hdfs = FileSystem.get(sparkContext.hadoopConfiguration)
-    val fDriverState = new Path(outputPath + "driverState")
-    val fPartitionState = new Path(outputPath + "partitionsState.parquet")
+    val fDriverState = new Path(outputPath + "driver-state")
+    val fPartitionState = new Path(outputPath + "partitions-state.parquet")
     hdfs.exists(fDriverState) && hdfs.exists(fPartitionState)
   }
 
   def linkageChainOnDisk: Boolean = {
     val hdfs = FileSystem.get(sparkContext.hadoopConfiguration)
-    val file = new Path(outputPath + "linkageChain.parquet")
+    val file = new Path(outputPath + "linkage-chain.parquet")
     hdfs.exists(file)
   }
 
@@ -182,7 +182,7 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
 
   def getSavedSharedMostProbableClusters: Option[RDD[Cluster]] = {
     if (sharedMostProbableClustersOnDisk) {
-      Some(Clusters.readCsv(outputPath + "sharedMostProbableClusters.csv"))
+      Some(Clusters.readCsv(outputPath + "shared-most-probable-clusters.csv"))
     } else None
   }
 

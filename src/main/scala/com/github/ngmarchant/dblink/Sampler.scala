@@ -63,7 +63,7 @@ object Sampler extends Logging {
     implicit val spark: SparkSession = SparkSession.builder().getOrCreate()
     implicit val sc: SparkContext = spark.sparkContext
 
-    val linkagePath = savePath + "linkageChain.parquet"
+    val linkagePath = savePath + "linkage-chain.parquet"
     var linkageWriter = new LinkageStructureWriter(linkagePath, continueChain, writeBufferSize)
     val diagnosticsPath = savePath + "diagnostics.csv"
     val diagnosticsWriter = new DiagnosticsWriter(diagnosticsPath, continueChain)

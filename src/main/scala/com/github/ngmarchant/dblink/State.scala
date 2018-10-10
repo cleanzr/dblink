@@ -90,14 +90,14 @@ case class State(iteration: Long,
     *
     * The variables on the driver are serialized and stored in a single file
     * called "driverState". The `partitions` RDD is converted to a Dataset,
-    * and stored in Parquet file called "partitionsState.parquet".
+    * and stored in Parquet file called "partitions-state.parquet".
     *
     * @param path path to write the files (must be a directory).
     */
   def save(path: String): Unit = {
     // TODO: check path is valid (a directory, maybe nothing to overwrite?)
     /** Driver variables */
-    val driverStatePath = path + "driverState"
+    val driverStatePath = path + "driver-state"
     val oos = new ObjectOutputStream(new FileOutputStream(driverStatePath))
     oos.writeLong(this.iteration)
     oos.writeObject(this.distProbs)
@@ -111,7 +111,7 @@ case class State(iteration: Long,
     oos.close()
 
     /** Save `partitions` in Parquet format */
-    val partitionsPath = path + "partitionsState.parquet"
+    val partitionsPath = path + "partitions-state.parquet"
     val spark = SparkSession.builder().getOrCreate()
     import spark.implicits._
     partitions.map(r => PartEntRecTriple(r._1, r._2)).toDS() // convert to Dataset[PartEntRecTriple]
@@ -127,7 +127,7 @@ object State {
     * @return a `State` object.
     */
   def read(path: String): State = {
-    val driverStatePath = path + "driverState"
+    val driverStatePath = path + "driver-state"
     val ois = new ObjectInputStream(new FileInputStream(driverStatePath))
     val iteration = ois.readLong()
     val distProbs = ois.readObject().asInstanceOf[DistortionProbs]
@@ -143,7 +143,7 @@ object State {
     import spark.implicits._
     val sc = spark.sparkContext
 
-    val partitionsPath = path + "partitionsState.parquet"
+    val partitionsPath = path + "partitions-state.parquet"
     val partitions = spark.read.format("parquet")
       .load(partitionsPath).as[PartEntRecTriple].rdd
       .map(r => (r.partitionId, r.entRecPair))

@@ -47,7 +47,7 @@ class LinkageChain(val rdd: RDD[LinkageState]) extends Logging {
   def sharedMostProbableClusters: RDD[Cluster] = _sharedMostProbableClusters(mostProbableClusters)
 
   /** Computes the cluster size frequency distribution along the linkage chain
-    * and saves the result to `clusterSizeDistribution.csv` in the working directory.
+    * and saves the result to `cluster-size-distribution.csv` in the output directory.
     *
     * @param path path to working directory
     */
@@ -84,7 +84,7 @@ class LinkageChain(val rdd: RDD[LinkageState]) extends Logging {
     distAlongChainRDD.unpersist()
 
     /** Output file can be created from Hadoop file system. */
-    val fullPath = path + "clusterSizeDistribution.csv"
+    val fullPath = path + "cluster-size-distribution.csv"
     info(s"Writing cluster size frequency distribution along the chain to $fullPath")
     val writer = BufferedFileWriter(fullPath, append = false, sc)
 
@@ -99,9 +99,9 @@ class LinkageChain(val rdd: RDD[LinkageState]) extends Logging {
   }
 
   /** Computes the sizes of the partitions along the chain and saves the result to
-    * `partitionSizes.csv` in the working directory.
+    * `partition-sizes.csv` in the output directory.
     *
-    * @param path path to working directory
+    * @param path path to output directory
     */
   def savePartitionSizes(path: String): Unit = _partitionSizes(rdd, path)
 }
@@ -109,7 +109,7 @@ class LinkageChain(val rdd: RDD[LinkageState]) extends Logging {
 object LinkageChain {
   /** Read samples of the linkage structure
     *
-    * @param path path to the working directory.
+    * @param path path to the output directory.
     * @return a linkage chain: an RDD containing samples of the linkage
     *         structure (by partition) along the Markov chain.
     */
@@ -119,7 +119,7 @@ object LinkageChain {
     import spark.implicits._
 
     spark.read.format("parquet")
-      .load(path + "linkageChain.parquet")
+      .load(path + "linkage-chain.parquet")
       .as[LinkageState]
       .rdd
   }
@@ -165,7 +165,7 @@ object LinkageChain {
     val partIds = partSizesAlongChain.map(_._2.keySet).reduce(_ ++ _).toArray.sorted
 
     /** Output file can be created from Hadoop file system. */
-    val fullPath = path + "partitionSizes.csv"
+    val fullPath = path + "partition-sizes.csv"
     val writer = BufferedFileWriter(fullPath, append = false, sc)
 
     /** Write CSV header */

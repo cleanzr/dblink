@@ -86,7 +86,7 @@ object ProjectAction {
         project.getSavedLinkageChain(lowerIterationCutoff) match {
           case Some(chain) =>
             val sMPC = chain.sharedMostProbableClusters.persist()
-            sMPC.saveCsv(project.outputPath + "sharedMostProbableClusters.csv")
+            sMPC.saveCsv(project.outputPath + "shared-most-probable-clusters.csv")
             chain.unpersist()
             Some(sMPC)
           case None =>
