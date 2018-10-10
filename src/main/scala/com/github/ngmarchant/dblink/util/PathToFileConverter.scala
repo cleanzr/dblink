@@ -11,7 +11,7 @@ object PathToFileConverter {
     val fs = FileSystem.get(path.toUri, conf)
     val tempFile = File.createTempFile(path.getName, "")
     tempFile.deleteOnExit()
-    fs.copyToLocalFile(path, new Nothing(tempFile.getAbsolutePath))
+    fs.copyToLocalFile(path, new Path(tempFile.getAbsolutePath))
     tempFile
   }
 }
