@@ -56,21 +56,30 @@ class LinkageChain(val rdd: RDD[LinkageState]) extends Logging {
 
     /** Compute dist separately for each partition, then combine the results */
     val distAlongChainRDD = rdd
-      .map(partitionState => {
-        val linkageStructure = partitionState.linkageStructure
-        val iteration = partitionState.iteration
-        val clustSizes = mutable.HashMap.empty[Int, Long]
-        linkageStructure.foreach { case (_, recIds) =>
-          val k = recIds.size
-          clustSizes.update(k, clustSizes.getOrElse(k, 0L) + 1L)
-        }
-        (iteration, clustSizes)
-      })
-      .reduceByKey((a, b) => {
-        val combined = mutable.HashMap.empty[Int, Long]
-        (a.keySet ++ b.keySet).foreach(k => combined(k) = a.getOrElse(k, 0L) + b.getOrElse(k, 0L))
-        combined // combine maps
-      })
+      .flatMap { case LinkageState(iteration, _, linkageStructure) =>
+        linkageStructure.map { case (_, recIds) => ((iteration, recIds.size), 1L) }
+      }
+      .reduceByKey((s1, s2) => s1 + s2)
+      .map { case ((iteration, clustSize), freq) => (iteration, (clustSize, freq))}
+      .aggregateByKey(Map.empty[Int, Long])(
+        seqOp = (m, v) => m + v,
+        combOp = (m1, m2) => m1 ++ m2
+      )
+//      .map(linkageState => {
+//        val linkageStructure = linkageState.linkageStructure
+//        val iteration = linkageState.iteration
+//        val clustSizes = mutable.HashMap.empty[Int, Long]
+//        linkageStructure.foreach { case (_, recIds) =>
+//          val k = recIds.size
+//          clustSizes.update(k, clustSizes.getOrElse(k, 0L) + 1L)
+//        }
+//        (iteration, clustSizes)
+//      })
+//      .reduceByKey((a, b) => {
+//        val combined = mutable.HashMap.empty[Int, Long]
+//        (a.keySet ++ b.keySet).foreach(k => combined(k) = a.getOrElse(k, 0L) + b.getOrElse(k, 0L))
+//        combined // combine maps
+//      })
       .persist(StorageLevel.MEMORY_ONLY_SER)
 
     /** Get the size of the largest cluster in the samples */
@@ -155,11 +164,15 @@ object LinkageChain {
 
   private def _partitionSizes(rdd: RDD[LinkageState], path: String): Unit = {
     val sc = rdd.sparkContext
-    val partSizesAlongChain = rdd.map(x => (x.iteration, (x.partitionId, x.linkageStructure.keySet.size)))
-      .collect()
-      .groupBy(_._1) // iteration
-      .mapValues(_.map(_._2).toMap) // partId -> size map
-      .toArray
+    val partSizesAlongChain = rdd
+      .map { case LinkageState(iteration, partitionId, linkageStructure) =>
+        (iteration, (partitionId, linkageStructure.keySet.size))
+      }
+      .aggregateByKey(Map.empty[PartitionId, Int])(
+        seqOp = (m, v) => m + v,
+        combOp = (m1, m2) => m1 ++ m2
+      ).
+      collect()
       .sortBy(_._1)
 
     val partIds = partSizesAlongChain.map(_._2.keySet).reduce(_ ++ _).toArray.sorted
