@@ -37,12 +37,12 @@ object Run extends App with Logging {
   val project = Project(config)
   println(project.mkString)
 
-  val actions = ProjectActions(config, project)
-  println("\n" + actions.mkString)
+  val steps = ProjectSteps(config, project)
+  println("\n" + steps.mkString)
 
   sc.setCheckpointDir(project.checkpointPath)
 
-  actions.execute()
+  steps.execute()
 
 //  def evaluate(projectPath: String,
 //               membership: RDD[(RecordId, EntityId)],

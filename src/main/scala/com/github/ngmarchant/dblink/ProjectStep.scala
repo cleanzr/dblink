@@ -22,19 +22,19 @@ package com.github.ngmarchant.dblink
 import com.github.ngmarchant.dblink.analysis.{ClusteringMetrics, PairwiseMetrics}
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 
-trait ProjectAction {
+trait ProjectStep {
   def execute(): Unit
 
   def mkString: String
 }
 
-object ProjectAction {
+object ProjectStep {
   private val supportedSamplers = Set("PCG-I", "PCG-II", "Gibbs")
   private val supportedEvaluationMetrics = Set("pairwise", "cluster")
   private val supportedSummaryQuantities = Set("cluster-size-distribution", "partition-sizes")
 
-  class SampleAction(project: Project, sampleSize: Int, burninInterval: Int,
-                     thinningInterval: Int, resume: Boolean, sampler: String) extends ProjectAction {
+  class SampleStep(project: Project, sampleSize: Int, burninInterval: Int,
+                     thinningInterval: Int, resume: Boolean, sampler: String) extends ProjectStep {
     require(sampleSize > 0, "sampleSize must be positive")
     require(burninInterval >= 0, "burninInterval must be non-negative")
     require(thinningInterval >= 0, "thinningInterval must be non-negative")
@@ -54,13 +54,13 @@ object ProjectAction {
     }
 
     override def mkString: String = {
-      if (resume) s"SampleAction: Evolving the chain from saved state with sampleSize=$sampleSize, burninInterval=$burninInterval, thinningInterval=$thinningInterval and sampler=$sampler"
-      else s"SampleAction: Evolving the chain from new initial state with sampleSize=$sampleSize, burninInterval=$burninInterval, thinningInterval=$thinningInterval and sampler=$sampler"
+      if (resume) s"SampleStep: Evolving the chain from saved state with sampleSize=$sampleSize, burninInterval=$burninInterval, thinningInterval=$thinningInterval and sampler=$sampler"
+      else s"SampleStep: Evolving the chain from new initial state with sampleSize=$sampleSize, burninInterval=$burninInterval, thinningInterval=$thinningInterval and sampler=$sampler"
     }
   }
 
-  class EvaluateAction(project: Project, lowerIterationCutoff: Int, metrics: Traversable[String],
-                       useExistingSMPC: Boolean) extends ProjectAction {
+  class EvaluateStep(project: Project, lowerIterationCutoff: Int, metrics: Traversable[String],
+                       useExistingSMPC: Boolean) extends ProjectStep {
     require(project.entIdAttribute.isDefined, "Ground truth entity ids are required for evaluation")
     require(lowerIterationCutoff >=0, "lowerIterationCutoff must be non-negative")
     require(metrics.nonEmpty, "metrics must be non-empty")
@@ -109,13 +109,13 @@ object ProjectAction {
     }
 
     override def mkString: String = {
-      if (useExistingSMPC) s"EvaluateAction: Evaluating saved sMPC clusters using ${metrics.map("'" + _ + "'").mkString("{", ", ", "}")} metrics"
-      else s"EvaluateAction: Evaluating sMPC clusters (computed from the chain for iterations >= $lowerIterationCutoff) using ${metrics.map("'" + _ + "'").mkString("{", ", ", "}")} metrics"
+      if (useExistingSMPC) s"EvaluateStep: Evaluating saved sMPC clusters using ${metrics.map("'" + _ + "'").mkString("{", ", ", "}")} metrics"
+      else s"EvaluateStep: Evaluating sMPC clusters (computed from the chain for iterations >= $lowerIterationCutoff) using ${metrics.map("'" + _ + "'").mkString("{", ", ", "}")} metrics"
     }
   }
 
-  class SummarizeAction(project: Project, lowerIterationCutoff: Int,
-                        quantities: Traversable[String]) extends ProjectAction {
+  class SummarizeStep(project: Project, lowerIterationCutoff: Int,
+                        quantities: Traversable[String]) extends ProjectStep {
     require(lowerIterationCutoff >= 0, "lowerIterationCutoff must be non-negative")
     require(quantities.nonEmpty, "quantities must be non-empty")
     require(quantities.forall(q => supportedSummaryQuantities.contains(q)), s"quantities must be one of ${supportedSummaryQuantities.mkString("{", ", ", "}")}.")
@@ -135,12 +135,12 @@ object ProjectAction {
     }
 
     override def mkString: String = {
-      s"SummarizeAction: Calculating summary quantities ${quantities.map("'" + _ + "'").mkString("{", ", ", "}")} along the chain for iterations >= $lowerIterationCutoff"
+      s"SummarizeStep: Calculating summary quantities ${quantities.map("'" + _ + "'").mkString("{", ", ", "}")} along the chain for iterations >= $lowerIterationCutoff"
     }
   }
 
-  class CopyFilesAction(project: Project, fileNames: Traversable[String], destinationPath: String,
-                        overwrite: Boolean, deleteSource: Boolean) extends ProjectAction {
+  class CopyFilesStep(project: Project, fileNames: Traversable[String], destinationPath: String,
+                        overwrite: Boolean, deleteSource: Boolean) extends ProjectStep {
 
     override def execute(): Unit = {
       val conf = project.sparkContext.hadoopConfiguration
@@ -157,7 +157,7 @@ object ProjectAction {
     }
 
     override def mkString: String = {
-      s"CopyFilesAction: Copying ${fileNames.mkString("{",", ","}")} to destination $destinationPath"
+      s"CopyFilesStep: Copying ${fileNames.mkString("{",", ","}")} to destination $destinationPath"
     }
   }
 }
