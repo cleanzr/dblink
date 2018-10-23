@@ -37,7 +37,7 @@ case class BufferedFileWriter(path: String,
         true, sparkContext.hadoopConfiguration, null)
       hdfs.delete(partsDir, true)
     }
-    hdfs.close()
+    //hdfs.close()
   }
 
   def flush(): Unit = writer.flush()
