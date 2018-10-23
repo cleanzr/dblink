@@ -47,23 +47,25 @@ class DiagnosticsWriter(path: String, continueChain: Boolean)
   def writeRow(state: State): Unit = {
     if (firstWrite && !continueChain) writeHeader(state); firstWrite = false
 
-    /** Aggregate number of distortions over the files */
-    val aggDistortions = state.summaryVars.aggDistortions
+    /** Get number of attributes */
+    val numAttributes = state.bcRecordsCache.value.numAttributes
+
+    /** Aggregate number of distortions for each attribute (sum over fileId) */
+    val aggAttrDistortions = state.summaryVars.aggDistortions
       .groupBy(_._1._1) // group by attrId
       .mapValues(_.values.sum) // sum over fileId
-      .toArray
-      .sortBy(_._1)
-      .map(_._2.toString)
 
-    val numAttributes = aggDistortions.length
-    val recDistortions = (0 to numAttributes).map(state.summaryVars.recDistortions.getOrElse(_, 0L).toString)
+    /** Convenience variable */
+    val recDistortions = state.summaryVars.recDistortions
 
     /** Build row of string values matching header*/
-    val row: Iterator[String] = Iterator(state.iteration.toString,
-      System.currentTimeMillis().toString,
-      (state.bcParameters.value.numEntities - state.summaryVars.numIsolates).toString,
-      f"${state.summaryVars.logLikelihood}%.9e") ++ aggDistortions ++
-        recDistortions
+    val row: Iterator[String] = Iterator(
+        state.iteration.toString,                                                          // iteration
+        System.currentTimeMillis().toString,                                               // systemTime-ms
+        (state.bcParameters.value.numEntities - state.summaryVars.numIsolates).toString,   // numObservedEntities
+        f"${state.summaryVars.logLikelihood}%.9e") ++                                      // logLikelihood
+        (0 until numAttributes).map(aggAttrDistortions.getOrElse(_, 0L).toString) ++       // aggDist-*
+        (0 to numAttributes).map(recDistortions.getOrElse(_, 0L).toString)                 // recDistortion-*
 
     writer.write(row.mkString(",") + "\n")
   }
