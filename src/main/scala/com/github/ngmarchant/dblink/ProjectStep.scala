@@ -20,6 +20,7 @@
 package com.github.ngmarchant.dblink
 
 import com.github.ngmarchant.dblink.analysis.{ClusteringMetrics, PairwiseMetrics}
+import com.github.ngmarchant.dblink.util.BufferedFileWriter
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 
 trait ProjectStep {
@@ -34,13 +35,14 @@ object ProjectStep {
   private val supportedSummaryQuantities = Set("cluster-size-distribution", "partition-sizes")
 
   class SampleStep(project: Project, sampleSize: Int, burninInterval: Int,
-                     thinningInterval: Int, resume: Boolean, sampler: String) extends ProjectStep {
+                     thinningInterval: Int, resume: Boolean, sampler: String) extends ProjectStep with Logging {
     require(sampleSize > 0, "sampleSize must be positive")
     require(burninInterval >= 0, "burninInterval must be non-negative")
     require(thinningInterval >= 0, "thinningInterval must be non-negative")
     require(supportedSamplers.contains(sampler), s"sampler must be one of ${supportedSamplers.mkString("", ", ", "")}.")
 
     override def execute(): Unit = {
+      info(mkString)
       val initialState = if (resume) {
         project.getSavedState.getOrElse(project.generateInitialState)
       } else {
@@ -60,7 +62,7 @@ object ProjectStep {
   }
 
   class EvaluateStep(project: Project, lowerIterationCutoff: Int, metrics: Traversable[String],
-                       useExistingSMPC: Boolean) extends ProjectStep {
+                       useExistingSMPC: Boolean) extends ProjectStep with Logging {
     require(project.entIdAttribute.isDefined, "Ground truth entity ids are required for evaluation")
     require(lowerIterationCutoff >=0, "lowerIterationCutoff must be non-negative")
     require(metrics.nonEmpty, "metrics must be non-empty")
@@ -68,12 +70,13 @@ object ProjectStep {
 
     override def execute(): Unit = {
       import com.github.ngmarchant.dblink.analysis.implicits._
+      info(mkString)
 
       // Get ground truth clustering
       val trueClusters = project.getTrueClusters match {
         case Some(clusters) => clusters.persist()
         case None =>
-          sys.error("Cannot complete evaluation as ground truth clusters are unavailable")
+          error("Ground truth clusters are unavailable")
           return
       }
 
@@ -90,21 +93,22 @@ object ProjectStep {
             chain.unpersist()
             Some(sMPC)
           case None =>
-            sys.error("No linkage chain")
+            error("No linkage chain")
             None
         }
       }
 
       sMPC match {
         case Some(predictedClusters) =>
+          val writer = BufferedFileWriter(project.outputPath + "evaluation-results.txt", append = false, project.sparkContext)
           metrics.foreach {
             case metric if metric == "pairwise" =>
-              println(PairwiseMetrics(predictedClusters.toPairwiseLinks, trueClusters.toPairwiseLinks).mkString)
+              writer.write(PairwiseMetrics(predictedClusters.toPairwiseLinks, trueClusters.toPairwiseLinks).mkString)
             case metric if metric == "cluster" =>
-              println(ClusteringMetrics(predictedClusters, trueClusters).mkString)
-            case metric => sys.error(s"Skipping unknown metric '$metric'")
+              writer.write(ClusteringMetrics(predictedClusters, trueClusters).mkString)
           }
-        case None => sys.error("Cannot complete evaluation as predicted clusters are unavailable")
+          writer.close()
+        case None => error("Predicted clusters are unavailable")
       }
     }
 
@@ -115,12 +119,14 @@ object ProjectStep {
   }
 
   class SummarizeStep(project: Project, lowerIterationCutoff: Int,
-                        quantities: Traversable[String]) extends ProjectStep {
+                        quantities: Traversable[String]) extends ProjectStep with Logging {
     require(lowerIterationCutoff >= 0, "lowerIterationCutoff must be non-negative")
     require(quantities.nonEmpty, "quantities must be non-empty")
     require(quantities.forall(q => supportedSummaryQuantities.contains(q)), s"quantities must be one of ${supportedSummaryQuantities.mkString("{", ", ", "}")}.")
 
     override def execute(): Unit = {
+      info(mkString)
+
       import com.github.ngmarchant.dblink.analysis.implicits._
       project.getSavedLinkageChain(lowerIterationCutoff) match {
         case Some(chain) =>
@@ -130,7 +136,7 @@ object ProjectStep {
             case "partition-sizes" => chain.savePartitionSizes(project.outputPath)
           }
           chain.unpersist()
-        case None => sys.error("no linkage chain")
+        case None => error("No linkage chain")
       }
     }
 
@@ -140,9 +146,11 @@ object ProjectStep {
   }
 
   class CopyFilesStep(project: Project, fileNames: Traversable[String], destinationPath: String,
-                        overwrite: Boolean, deleteSource: Boolean) extends ProjectStep {
+                        overwrite: Boolean, deleteSource: Boolean) extends ProjectStep with Logging {
 
     override def execute(): Unit = {
+      info(mkString)
+
       val conf = project.sparkContext.hadoopConfiguration
       val srcParent = new Path(project.outputPath)
       val srcFs = FileSystem.get(srcParent.toUri, conf)
