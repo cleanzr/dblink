@@ -19,7 +19,7 @@
 
 package com.github.ngmarchant.dblink
 
-import com.github.ngmarchant.dblink.util.PathToFileConverter
+import com.github.ngmarchant.dblink.util.{BufferedFileWriter, PathToFileConverter}
 import com.typesafe.config.ConfigFactory
 import org.apache.spark.sql.SparkSession
 import org.apache.hadoop.fs.Path
@@ -35,10 +35,12 @@ object Run extends App with Logging {
   val config = ConfigFactory.parseFile(configFile).resolve()
 
   val project = Project(config)
-  println(project.mkString)
+  val writer = BufferedFileWriter(project.outputPath + "run.txt", append = false, sparkContext = project.sparkContext)
+  writer.write(project.mkString)
 
   val steps = ProjectSteps(config, project)
-  println("\n" + steps.mkString)
+  writer.write("\n" + steps.mkString)
+  writer.close()
 
   sc.setCheckpointDir(project.checkpointPath)
 
