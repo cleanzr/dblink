@@ -100,13 +100,14 @@ object ProjectStep {
 
       sMPC match {
         case Some(predictedClusters) =>
-          val writer = BufferedFileWriter(project.outputPath + "evaluation-results.txt", append = false, project.sparkContext)
-          metrics.foreach {
+          val results = metrics.map {
             case metric if metric == "pairwise" =>
-              writer.write(PairwiseMetrics(predictedClusters.toPairwiseLinks, trueClusters.toPairwiseLinks).mkString)
+              PairwiseMetrics(predictedClusters.toPairwiseLinks, trueClusters.toPairwiseLinks).mkString
             case metric if metric == "cluster" =>
-              writer.write(ClusteringMetrics(predictedClusters, trueClusters).mkString)
+              ClusteringMetrics(predictedClusters, trueClusters).mkString
           }
+          val writer = BufferedFileWriter(project.outputPath + "evaluation-results.txt", append = false, project.sparkContext)
+          writer.write(results.mkString("", "\n", "\n"))
           writer.close()
         case None => error("Predicted clusters are unavailable")
       }
