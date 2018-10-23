@@ -90,7 +90,7 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
     lines += s"  * Saving Markov chain and complete final state to '$outputPath'"
     lines += s"  * Saving Spark checkpoints to '$checkpointPath'"
 
-    lines.mkString("\n")
+    lines.mkString("","\n","\n")
   }
 
   def sharedMostProbableClustersOnDisk: Boolean = {
