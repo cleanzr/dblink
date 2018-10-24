@@ -89,12 +89,11 @@ object Sampler extends Logging {
 
     if (burninInterval > 0) info(s"Running burn-in for $burninInterval iterations.")
     while (sampleCtr < sampleSize) {
-      val completedIterations = state.iteration - initialIteration
-
       state = state.nextState(checkpointer = checkpointer, collapsedEntityIds, collapsedEntityValues)
 
       //newState.partitions.persist(StorageLevel.MEMORY_ONLY_SER)
       //state = newState
+      val completedIterations = state.iteration - initialIteration
 
       if (completedIterations == burninInterval) {
         if (burninInterval > 0) info("Burn-in complete.")
