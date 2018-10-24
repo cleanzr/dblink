@@ -19,71 +19,81 @@
 
 package com.github.ngmarchant.dblink
 
-import com.github.ngmarchant.dblink.util.PeriodicRDDCheckpointer
+import com.github.ngmarchant.dblink.util.{BufferedRDDWriter, PeriodicRDDCheckpointer}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.storage.StorageLevel
 
 object Sampler extends Logging {
 
-  /** Generates posterior samples by successively applying the Markov
-    * transition operator starting from a given initial state. The samples are
-    * written to disk on the executors.
+  /** Generates posterior samples by successively applying the Markov transition operator starting from a given
+    * initial state. The samples are written to the path provided.
     *
-    * @param initialState initial state.
-    * @param sampleSize number of samples to keep (after burn-in and thinning).
-    * @param burninInterval burn-in interval.
-    * @param thinningInterval thinning interval.
-    * @param checkpointInterval
-    * @param writeBufferSize
-    * @param savePath
+    * @param initialState The initial state of the Markov chain.
+    * @param sampleSize A positive integer specifying the desired number of samples (after burn-in and thinning)
+    * @param outputPath A string specifying the path to save output (includes samples and diagnostics). HDFS and
+    *                   local filesystems are supported.
+    * @param burninInterval A positive integer specifying the number of initial samples to discard as burn-in.
+    *                       The default is 0, which means no burn-in is applied.
+    * @param thinningInterval A positive integer specifying the period for saving samples to disk. The default value is
+    *                         1, which means no thinning is applied.
+    * @param checkpointInterval A non-negative integer specifying the period for checkpointing. This prevents the
+    *                           lineage of the RDD (internal to state) from becoming too long. Smaller values require
+    *                           more frequent writing to disk, larger values require more CPU/memory. The default
+    *                           value of 20, is a reasonable trade-off.
+    * @param writeBufferSize A positive integer specifying the number of samples to queue in memory before writing to
+    *                        disk.
+    * @param collapsedEntityIds A Boolean specifying whether to collapse the distortions when updating the entity ids.
+    *                           Defaults to false.
+    * @param collapsedEntityValues A Boolean specifying whether to collapse the distotions when updating the entity
+    *                              values. Defaults to true.
     * @return the final state of the Markov chain.
     */
   def sample(initialState: State,
              sampleSize: Int,
-             savePath: String,
+             outputPath: String,
              burninInterval: Int = 0,
              thinningInterval: Int = 1,
-             checkpointInterval: Int = 50,
+             checkpointInterval: Int = 20,
              writeBufferSize: Int = 10,
              collapsedEntityIds: Boolean = false,
              collapsedEntityValues: Boolean = true): State = {
+    require(sampleSize > 0, "`sampleSize` must be positive.")
     require(burninInterval >= 0, "`burninInterval` must be non-negative.")
     require(thinningInterval > 0, "`thinningInterval` must be positive.")
     require(checkpointInterval >= 0, "`checkpointInterval` must be non-negative.")
-    require(sampleSize > 0, "`sampleSize` must be positive.")
     require(writeBufferSize > 0, "`writeBufferSize` must be positive.")
+    // TODO: ensure that savePath is a valid directory
 
-    var sampleCtr = 0
-    var state = initialState
-    val startIteration = initialState.iteration
+    var sampleCtr = 0                             // counter for number of samples produced (excludes burn-in/thinning)
+    var state = initialState                      // current state
+    val initialIteration = initialState.iteration // initial iteration (need not be zero)
+    val continueChain = initialIteration != 0     // whether we're continuing a previous chain
 
-    // TODO: ensure that savePath is a directory
-
-    val continueChain = startIteration != 0
     implicit val spark: SparkSession = SparkSession.builder().getOrCreate()
     implicit val sc: SparkContext = spark.sparkContext
+    import spark.implicits._
 
-    val linkagePath = savePath + "linkage-chain.parquet"
-    var linkageWriter = new LinkageStructureWriter(linkagePath, continueChain, writeBufferSize)
-    val diagnosticsPath = savePath + "diagnostics.csv"
+    /** Set-up writers */
+    val linkagePath = outputPath + "linkage-chain.parquet"
+    var linkageWriter = BufferedRDDWriter[LinkageState](writeBufferSize, linkagePath, continueChain)
+    val diagnosticsPath = outputPath + "diagnostics.csv"
     val diagnosticsWriter = new DiagnosticsWriter(diagnosticsPath, continueChain)
+    val checkpointer = new PeriodicRDDCheckpointer[(PartitionId, EntRecPair)](checkpointInterval, sc)
 
     if (!continueChain && burninInterval == 0) {
       /** Need to record initial state */
-      linkageWriter.write(state)
+      checkpointer.update(state.partitions)
+      linkageWriter = linkageWriter.append(state.getLinkageStructure())
       diagnosticsWriter.writeRow(state)
     }
 
-    val cp = new PeriodicRDDCheckpointer[(PartitionId, EntRecPair)](checkpointInterval, sc)
-
     if (burninInterval > 0) info(s"Running burn-in for $burninInterval iterations.")
     while (sampleCtr < sampleSize) {
-      val completedIterations = state.iteration - startIteration
+      val completedIterations = state.iteration - initialIteration
 
-      state = state.nextState(checkpointer = cp, collapsedEntityIds, collapsedEntityValues)
+      state = state.nextState(checkpointer = checkpointer, collapsedEntityIds, collapsedEntityValues)
+
       //newState.partitions.persist(StorageLevel.MEMORY_ONLY_SER)
-      //state.partitions.unpersist()
       //state = newState
 
       if (completedIterations == burninInterval) {
@@ -92,21 +102,23 @@ object Sampler extends Logging {
       }
 
       if (completedIterations >= burninInterval) {
+        /** Finished burn-in, so start writing samples to disk (accounting for thinning) */
         if ((completedIterations - burninInterval)%thinningInterval == 0) {
-          linkageWriter.write(state)
+          linkageWriter = linkageWriter.append(state.getLinkageStructure())
           diagnosticsWriter.writeRow(state)
           sampleCtr += 1
         }
       }
 
-      diagnosticsWriter.progress() // ensure that diagnosticsWriter is kept alive
+      /** Ensure writer is kept alive (may die if burninInterval/thinningInterval is large) */
+      diagnosticsWriter.progress()
     }
 
     info("Sampling complete. Writing final state and remaining samples to disk.")
-    linkageWriter.close()
+    linkageWriter = linkageWriter.flush()
     diagnosticsWriter.close()
-    state.save(savePath)
-    info(s"Finished writing to disk at $savePath")
+    state.save(outputPath)
+    info(s"Finished writing to disk at $outputPath")
     state
   }
 }

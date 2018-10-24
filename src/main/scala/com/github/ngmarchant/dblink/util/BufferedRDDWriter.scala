@@ -30,45 +30,43 @@ case class BufferedRDDWriter[T : ClassTag : Encoder](path: String,
                                                      capacity: Int,
                                                      append: Boolean,
                                                      rdds: Seq[RDD[T]],
-                                                     firstFlush: Boolean)
+                                                     firstFlush: Boolean) extends Logging {
+
+  def append(rows: RDD[T]): BufferedRDDWriter[T] = {
+    val writer = if (capacity - rdds.size == 0) this.flush() else this
+    rows.persist(StorageLevel.MEMORY_ONLY)
+    rows.count() // force evaluation
+    val newRdds = writer.rdds :+ rows
+    this.copy(rdds = newRdds)
+  }
+
+  private def write(unionedRdds: RDD[T], overwrite: Boolean): Unit = {
+    /** Write to disk in Parquet format relying on Dataset/Dataframe API */
+    val spark = SparkSession.builder().getOrCreate()
+    val unionedDS = spark.createDataset(unionedRdds)
+    val saveMode = if (overwrite) "overwrite" else "append"
+    unionedDS.write.partitionBy("partitionId").format("parquet").mode(saveMode).save(path)
+  }
+
+  def flush(): BufferedRDDWriter[T] = {
+    if (rdds.isEmpty) return this
+
+    /** Combine RDDs in the buffer using a union operation */
+    val sc = rdds.head.sparkContext
+    val unionedRdds = sc.union(rdds)
+
+    /** Write to disk. Note: overwrite if not appending and this is the first write to disk. */
+    write(unionedRdds, firstFlush && !append)
+    debug(s"Flushed to disk at ${path}")
+
+    /** Unpersist RDDs in buffer as they're no longer required */
+    rdds.foreach(_.unpersist(blocking = false))
+
+    this.copy(rdds = Seq.empty[RDD[T]], firstFlush = false)
+  }
+}
 
 object BufferedRDDWriter extends Logging {
-  def append[T : ClassTag : Encoder](writerState: BufferedRDDWriter[T], rows: RDD[T]): BufferedRDDWriter[T] = {
-    val currentState = if (writerState.capacity - writerState.rdds.size == 0) flush(writerState) else writerState
-    rows.persist(StorageLevel.MEMORY_ONLY_SER)
-    rows.count() // to force evaluation
-    val newRdds = currentState.rdds :+ rows
-    BufferedRDDWriter(currentState.path, currentState.capacity, currentState.append, newRdds, currentState.firstFlush)
-  }
-
-  def flush[T : ClassTag : Encoder](writerState: BufferedRDDWriter[T]): BufferedRDDWriter[T] = {
-    if (writerState.rdds.nonEmpty) {
-      val sc = writerState.rdds.head.sparkContext
-
-      val spark = SparkSession.builder().getOrCreate()
-
-      val unionedRdds = sc.union(writerState.rdds)
-      val unionedDS = spark.createDataset(unionedRdds)
-      if (writerState.firstFlush) {
-        // Special case for first write to disk: may need to overwrite a
-        // pre-existing file at the given path
-        if (writerState.append) {
-          unionedDS.write.partitionBy("partitionId").format("parquet").mode("append").save(writerState.path)
-        } else {
-          unionedDS.write.partitionBy("partitionId").format("parquet").mode("overwrite").save(writerState.path)
-        }
-      } else {
-        unionedDS.write.partitionBy("partitionId").format("parquet").mode("append").save(writerState.path)
-      }
-      debug(s"Flushed to disk at ${writerState.path}")
-      writerState.rdds.foreach(_.unpersist())
-      val newRdds = Seq.empty[RDD[T]]
-      BufferedRDDWriter(writerState.path, writerState.capacity, writerState.append, newRdds, firstFlush = false)
-    } else {
-      writerState
-    }
-  }
-
   def apply[T : ClassTag : Encoder](capacity: Int, path: String, append: Boolean): BufferedRDDWriter[T] = {
     val rdds = Seq.empty[RDD[T]]
     BufferedRDDWriter[T](path, capacity, append, rdds, firstFlush = true)

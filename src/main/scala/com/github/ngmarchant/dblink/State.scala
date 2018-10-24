@@ -31,6 +31,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 /** State of the Markov chain
   *
   * @param iteration iteration counter.
@@ -79,12 +82,33 @@ case class State(iteration: Long,
     /** If handling persistence here, may want to set this:
       * .persist(StorageLevel.MEMORY_ONLY_SER) */
     checkpointer.update(newPartitions)
+    //if (checkpointer) newPartitions.checkpoint()
+
     val newSummaryVariables = updateSummaryVariables(newPartitions, accumulators,
       bcDistProbs, bcRecordsCache)
     bcDistProbs.destroy()
 
     this.copy(iteration = iteration + 1, partitions = newPartitions, distProbs = newDistProbs,
       summaryVars = newSummaryVariables)
+  }
+
+  def getLinkageStructure(): RDD[LinkageState] = {
+    partitions.mapPartitions(partition => {
+      val entRecClusters = mutable.LongMap.empty[ArrayBuffer[RecordId]]
+      var partitionId = -1
+      partition.foreach { case (pId: Int, EntRecPair(entity, record)) =>
+        partitionId = pId
+        val cluster = entRecClusters.getOrElseUpdate(entity.id, ArrayBuffer.empty[RecordId])
+        if (record.isDefined) {
+          cluster += record.get.id
+        }
+      }
+      if (entRecClusters.isEmpty) {
+        Iterator()
+      } else {
+        Iterator(LinkageState(iteration, partitionId, entRecClusters.toMap))
+      }
+    }, preservesPartitioning = true)
   }
 
   /** Save state to disk.
