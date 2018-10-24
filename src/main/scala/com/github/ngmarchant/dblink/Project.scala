@@ -60,17 +60,17 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
     val lines = mutable.ArrayBuffer.empty[String]
     lines += "Data settings"
     lines += "-------------"
-    lines += s"  * Data files located at '$dataPath'"
-    lines += s"  * The record identifier attribute is '$recIdAttribute'"
+    lines += s"  * Using data files are located at '$dataPath'"
+    lines += s"  * Using record identifier attribute '$recIdAttribute'"
     fileIdAttribute match {
-      case Some(fId) => lines += s"  * The file identifier attribute is '$fId'"
+      case Some(fId) => lines += s"  * Using file identifier attribute '$fId'"
       case None => lines += "  * There is no file identifier"
     }
     entIdAttribute match {
-      case Some(eId) => lines += s"  * The entity identifier attribute is '$eId'"
+      case Some(eId) => lines += s"  * Using entity identifier attribute '$eId'"
       case None => lines += "  * There is no entity identifier"
     }
-    lines += s"  * The matching attributes are ${matchingAttributes.map("'" + _.name + "'").mkString(", ")}"
+    lines += s"  * Using matching attributes ${matchingAttributes.map("'" + _.name + "'").mkString(", ")}"
     lines += ""
 
     lines += "Hyperparameter settings"
@@ -87,6 +87,8 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
 
     lines += "Project settings"
     lines += "----------------"
+    lines += s"  * Using randomSeed=$randomSeed"
+    lines += s"  * Using expectedMaxClusterSize=$randomSeed"
     lines += s"  * Saving Markov chain and complete final state to '$outputPath'"
     lines += s"  * Saving Spark checkpoints to '$checkpointPath'"
 
