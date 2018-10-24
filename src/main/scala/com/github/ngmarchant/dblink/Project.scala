@@ -88,7 +88,7 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
     lines += "Project settings"
     lines += "----------------"
     lines += s"  * Using randomSeed=$randomSeed"
-    lines += s"  * Using expectedMaxClusterSize=$randomSeed"
+    lines += s"  * Using expectedMaxClusterSize=$expectedMaxClusterSize"
     lines += s"  * Saving Markov chain and complete final state to '$outputPath'"
     lines += s"  * Saving Spark checkpoints to '$checkpointPath'"
 
