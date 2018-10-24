@@ -38,7 +38,7 @@ case class BufferedRDDWriter[T : ClassTag : Encoder](path: String,
     rows.persist(StorageLevel.MEMORY_ONLY)
     rows.count() // force evaluation
     val newRdds = writer.rdds :+ rows
-    this.copy(rdds = newRdds)
+    writer.copy(rdds = newRdds)
   }
 
   private def write(unionedRdds: RDD[T], overwrite: Boolean): Unit = {
