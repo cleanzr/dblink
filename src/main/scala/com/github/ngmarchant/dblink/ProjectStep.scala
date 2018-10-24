@@ -62,7 +62,7 @@ object ProjectStep {
   }
 
   class EvaluateStep(project: Project, lowerIterationCutoff: Int, metrics: Traversable[String],
-                       useExistingSMPC: Boolean) extends ProjectStep with Logging {
+                     useExistingSMPC: Boolean) extends ProjectStep with Logging {
     require(project.entIdAttribute.isDefined, "Ground truth entity ids are required for evaluation")
     require(lowerIterationCutoff >=0, "lowerIterationCutoff must be non-negative")
     require(metrics.nonEmpty, "metrics must be non-empty")
@@ -120,7 +120,7 @@ object ProjectStep {
   }
 
   class SummarizeStep(project: Project, lowerIterationCutoff: Int,
-                        quantities: Traversable[String]) extends ProjectStep with Logging {
+                      quantities: Traversable[String]) extends ProjectStep with Logging {
     require(lowerIterationCutoff >= 0, "lowerIterationCutoff must be non-negative")
     require(quantities.nonEmpty, "quantities must be non-empty")
     require(quantities.forall(q => supportedSummaryQuantities.contains(q)), s"quantities must be one of ${supportedSummaryQuantities.mkString("{", ", ", "}")}.")
@@ -147,7 +147,7 @@ object ProjectStep {
   }
 
   class CopyFilesStep(project: Project, fileNames: Traversable[String], destinationPath: String,
-                        overwrite: Boolean, deleteSource: Boolean) extends ProjectStep with Logging {
+                      overwrite: Boolean, deleteSource: Boolean) extends ProjectStep with Logging {
 
     override def execute(): Unit = {
       info(mkString)
