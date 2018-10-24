@@ -95,7 +95,7 @@ object Sampler extends Logging {
       //state = newState
       val completedIterations = state.iteration - initialIteration
 
-      if (completedIterations == burninInterval) {
+      if (completedIterations - 1 == burninInterval) {
         if (burninInterval > 0) info("Burn-in complete.")
         info(s"Generating $sampleSize sample(s) with thinningInterval=$thinningInterval.")
       }
