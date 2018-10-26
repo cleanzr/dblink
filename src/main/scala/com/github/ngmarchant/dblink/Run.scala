@@ -46,6 +46,8 @@ object Run extends App with Logging {
 
   steps.execute()
 
+  sc.stop()
+
 //  def evaluate(projectPath: String,
 //               membership: RDD[(RecordId, EntityId)],
 //               linkageChain: RDD[LinkageState],
