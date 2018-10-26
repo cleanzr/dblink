@@ -80,7 +80,7 @@ class LinkageChain(val rdd: RDD[LinkageState]) extends Logging {
 //        (a.keySet ++ b.keySet).foreach(k => combined(k) = a.getOrElse(k, 0L) + b.getOrElse(k, 0L))
 //        combined // combine maps
 //      })
-      .persist(StorageLevel.MEMORY_ONLY_SER)
+      .persist(StorageLevel.MEMORY_AND_DISK)
 
     /** Get the size of the largest cluster in the samples */
     val maxClustSize = distAlongChainRDD.aggregate(0)(
