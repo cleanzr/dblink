@@ -377,21 +377,28 @@ object GibbsUpdates {
                               distProbs: DistortionProbs)
                              (implicit rand: RandomGenerator): EntityId = {
     val indexedAttributes = recordsCache.indexedAttributes
-    val entIds = entities.keys.toArray
+    //val entIds = entities.keys.toArray
     val valuesAndWeights = entities.mapValues { entity =>
       entity.values.iterator.zipWithIndex.foldLeft(1.0) { case (weight, (entValue, attrId)) =>
-        val constAttr = indexedAttributes(attrId).isConstant
-        val attributeIndex = indexedAttributes(attrId).index
         val recValue = record.values(attrId).value
-        val recValueProb = attributeIndex.probabilityOf(recValue)
-        val distProb = distProbs(attrId, record.fileId)
-        if (constAttr) {
-          weight * ((if (recValue == entValue) 1.0 - distProb else 0.0) +
-            distProb * recValueProb)
+        if (recValue < 0) {
+          /** Record attribute is missing: weight is unchanged */
+          weight
         } else {
-          weight * ((if (recValue == entValue) 1.0 - distProb else 0.0) +
-            distProb * recValueProb * attributeIndex.simNormalizationOf(entValue) *
-              attributeIndex.expSimOf(recValue, entValue))
+          /** Record attribute is observed: need to update weight */
+          val constAttr = indexedAttributes(attrId).isConstant
+          val attributeIndex = indexedAttributes(attrId).index
+
+          val recValueProb = attributeIndex.probabilityOf(recValue)
+          val distProb = distProbs(attrId, record.fileId)
+          if (constAttr) {
+            weight * ((if (recValue == entValue) 1.0 - distProb else 0.0) +
+              distProb * recValueProb)
+          } else {
+            weight * ((if (recValue == entValue) 1.0 - distProb else 0.0) +
+              distProb * recValueProb * attributeIndex.simNormalizationOf(entValue) *
+                attributeIndex.expSimOf(recValue, entValue))
+          }
         }
       }
     }
