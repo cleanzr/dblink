@@ -22,6 +22,7 @@ package com.github.ngmarchant.dblink
 import com.github.ngmarchant.dblink.analysis.{ClusteringMetrics, PairwiseMetrics}
 import com.github.ngmarchant.dblink.util.BufferedFileWriter
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.spark.storage.StorageLevel
 
 trait ProjectStep {
   def execute(): Unit
@@ -131,12 +132,10 @@ object ProjectStep {
       import com.github.ngmarchant.dblink.analysis.implicits._
       project.getSavedLinkageChain(lowerIterationCutoff) match {
         case Some(chain) =>
-          chain.persist()
           quantities.foreach {
             case "cluster-size-distribution" => chain.saveClusterSizeDistribution(project.outputPath)
             case "partition-sizes" => chain.savePartitionSizes(project.outputPath)
           }
-          chain.unpersist()
         case None => error("No linkage chain")
       }
     }
