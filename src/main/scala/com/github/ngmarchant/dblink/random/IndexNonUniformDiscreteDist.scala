@@ -21,11 +21,8 @@ package com.github.ngmarchant.dblink.random
 
 import org.apache.commons.math3.random.RandomGenerator
 
-class IndexNonUniformDiscreteDist(weights: Traversable[Double])
-                                 (implicit rand: RandomGenerator) extends DiscreteDist[Int] {
+class IndexNonUniformDiscreteDist(weights: Traversable[Double]) extends DiscreteDist[Int] {
   require(weights.nonEmpty, "`weights` must be non-empty")
-
-  private var rng = rand
 
   private val (_probsArray, _totalWeight) = IndexNonUniformDiscreteDist.processWeights(weights)
 
@@ -36,7 +33,7 @@ class IndexNonUniformDiscreteDist(weights: Traversable[Double])
   override def values: Traversable[Int] = 0 until numValues
 
   /** AliasSampler to efficiently sample from the distribution */
-  private val sampler = AliasSampler(_probsArray, checkWeights = false, normalized = true)(rand = rng)
+  private val sampler = AliasSampler(_probsArray, checkWeights = false, normalized = true)
 
   //    /** Inverse CDF */
   //    private def sampleNaive(): Int = {
@@ -49,22 +46,16 @@ class IndexNonUniformDiscreteDist(weights: Traversable[Double])
   //      if (prob > 0.0) idx else idx - 1
   //    }
 
-  override def sample(): Int = sampler.sample()
+  override def sample()(implicit rand: RandomGenerator): Int = sampler.sample()
 
   override def probabilityOf(idx: Int): Double = {
     if (idx < 0 || idx >= numValues) 0.0
     else _probsArray(idx)
   }
-
-  override def setRand(rand: RandomGenerator): Unit = {
-    rng = rand
-    sampler.setRand(rand)
-  }
 }
 
 object IndexNonUniformDiscreteDist {
-  def apply(weights: Traversable[Double])
-           (implicit rand: RandomGenerator): IndexNonUniformDiscreteDist = {
+  def apply(weights: Traversable[Double]): IndexNonUniformDiscreteDist = {
     new IndexNonUniformDiscreteDist(weights)
   }
 

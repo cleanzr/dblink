@@ -20,7 +20,6 @@
 package com.github.ngmarchant.dblink
 
 import com.github.ngmarchant.dblink.accumulators.MapLongAccumulator
-import org.apache.commons.math3.random.{MersenneTwister, RandomGenerator}
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 
@@ -35,11 +34,6 @@ import org.apache.spark.rdd.RDD
 class RecordsCache(val indexedAttributes: IndexedSeq[IndexedAttribute],
                    val fileSizes: Map[FileId, Long],
                    val missingCounts: Option[Map[(FileId, AttributeId), Long]] = None) extends Serializable {
-  /** Set the random number generator.
-    * Called at the beginning of each iteration on each executor. */
-  def setRand(rand: RandomGenerator): Unit = {
-    this.indexedAttributes.foreach(_.index.setRand(rand))
-  }
 
   def distortionPrior: Iterator[BetaShapeParameters] = indexedAttributes.iterator.map(_.distortionPrior)
 
@@ -76,8 +70,6 @@ object RecordsCache extends Logging {
             expectedMaxClusterSize: Int): RecordsCache = {
     val firstRecord = records.take(1).head
     require(firstRecord.values.length == attributeSpecs.length, "attribute specifications do not match the records")
-
-    implicit val rand: RandomGenerator = new MersenneTwister()
 
     /** Use accumulators to gather record stats in one pass */
     val accFileSizes = new MapLongAccumulator[FileId]

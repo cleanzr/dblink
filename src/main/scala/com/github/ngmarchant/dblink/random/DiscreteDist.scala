@@ -41,9 +41,10 @@ trait DiscreteDist[T] extends Serializable {
 
   /** Draw a value according to the distribution
     *
+    * @param rand external RandomGenerator to use for drawing sample
     * @return a value from the support set
     */
-  def sample(): T
+  def sample()(implicit rand: RandomGenerator): T
 
   /** Get the probability mass associated with a value
     *
@@ -51,22 +52,15 @@ trait DiscreteDist[T] extends Serializable {
     * @return probability. Returns 0.0 if the value is not in the support set.
     */
   def probabilityOf(value: T): Double
-
-  /** Change the internal random generator
-    *
-    * @param rng a RandomGenerator
-    */
-  def setRand(rng: RandomGenerator): Unit
 }
 
 object DiscreteDist {
   def apply[T](valuesAndWeights: Map[T, Double])
-              (implicit rand: RandomGenerator, ev: ClassTag[T]): NonUniformDiscreteDist[T] = {
+              (implicit ev: ClassTag[T]): NonUniformDiscreteDist[T] = {
     NonUniformDiscreteDist[T](valuesAndWeights)
   }
 
-  def apply(weights: Traversable[Double])
-           (implicit rand: RandomGenerator): IndexNonUniformDiscreteDist = {
+  def apply(weights: Traversable[Double]): IndexNonUniformDiscreteDist = {
     IndexNonUniformDiscreteDist(weights)
   }
 }

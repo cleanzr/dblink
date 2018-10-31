@@ -126,13 +126,8 @@ object GibbsUpdates {
 
       /** Ensure we get different pseudo-random numbers on each partition and
         * for each iteration */
-      implicit val rand: RandomGenerator = new MersenneTwister()
       val newSeed = iteration + index + randomSeed + 1L
-      rand.setSeed(newSeed.longValue())
-
-      /** Ensure attribute distributions reference the same RandomGenerator (for
-        * this partition and iteration) */
-      recordsCache.setRand(rand)
+      implicit val rand: RandomGenerator = new MersenneTwister(newSeed.longValue())
 
       updatePartition(partition, bcDistProbs.value, bcPartitionFunction.value, recordsCache, collapsedEntityId, collapsedEntityValues)
     }.partitionBy(partitioner) // Move entity clusters to newly-assigned partitions
@@ -565,33 +560,34 @@ object GibbsUpdates {
                         records: Array[Record[DistortedValue]],
                         linkedRowIds: Traversable[Int])
                        (implicit rand: RandomGenerator): ValueId = {
+    val observedLinkedRowIds = linkedRowIds.filter(rowId => records(rowId).values(attrId).value >= 0)
     val constAttribute = indexedAttribute.isConstant
-    val baseDistribution = if (!constAttribute && linkedRowIds.nonEmpty) {
-      indexedAttribute.index.getSimNormDist(linkedRowIds.size)
+    val baseDistribution = if (!constAttribute && observedLinkedRowIds.nonEmpty) {
+      indexedAttribute.index.getSimNormDist(observedLinkedRowIds.size)
     } else indexedAttribute.index.distribution
 
-    if (linkedRowIds.isEmpty) {
+    if (observedLinkedRowIds.isEmpty) {
       baseDistribution.sample()
     } else {
       /** Search for an observed, non-distorted value */
       var nonDistortedValue: ValueId = -1
-      val itLinkedRowIds = linkedRowIds.toIterator
+      val itLinkedRowIds = observedLinkedRowIds.toIterator
       while (itLinkedRowIds.hasNext && nonDistortedValue < 0) {
         val rowId = itLinkedRowIds.next()
         val distRecValue = records(rowId).values(attrId)
-        if (!distRecValue.distorted && distRecValue.value >= 0) nonDistortedValue = distRecValue.value
+        if (!distRecValue.distorted) nonDistortedValue = distRecValue.value
       }
 
       if (nonDistortedValue >= 0) {
         /** Observed, non-distorted value exists, so the new value is determined */
         nonDistortedValue
       } else {
-        /** All linked record values are distorted or unobserved for this attribute. */
+        /** All observed linked record values are distorted for this attribute. */
         if (constAttribute) {
           baseDistribution.sample()
         } else {
           val perturbDistribution = perturbedDistY(attrId, indexedAttribute.index,
-            records, linkedRowIds.toIterator, baseDistribution)
+            records, observedLinkedRowIds.toIterator, baseDistribution)
           if (rand.nextDouble() < 1.0/(1.0 + perturbDistribution.totalWeight)) {
             baseDistribution.sample()
           } else {
@@ -605,14 +601,14 @@ object GibbsUpdates {
   def perturbedDistY(attrId: AttributeId,
                      attributeIndex: AttributeIndex,
                      records: Array[Record[DistortedValue]],
-                     linkedRowIds: Iterator[Int],
+                     observedLinkedRowIds: Iterator[Int],
                      baseDistribution: DiscreteDist[ValueId])
                     (implicit rand: RandomGenerator): DiscreteDist[ValueId] = {
 
     val valuesWeights = mutable.HashMap.empty[ValueId, Double]
 
-    while (linkedRowIds.hasNext) {
-      val rowId = linkedRowIds.next()
+    while (observedLinkedRowIds.hasNext) {
+      val rowId = observedLinkedRowIds.next()
       val distRecValue = records(rowId).values(attrId)
 
       if (distRecValue.value >= 0) { // Record value is observed

@@ -32,7 +32,7 @@ import scala.reflect.ClassTag
   * @tparam T type of the values
   */
 class NonUniformDiscreteDist[T](valuesWeights: Map[T, Double])
-                               (implicit rand: RandomGenerator, ev: ClassTag[T]) extends DiscreteDist[T] {
+                               (implicit ev: ClassTag[T]) extends DiscreteDist[T] {
   require(valuesWeights.nonEmpty, "`valuesWeights` must be non-empty")
 
   private val (_valuesArray, _probsArray, _totalWeight) = NonUniformDiscreteDist.processValuesWeights(valuesWeights)
@@ -43,10 +43,8 @@ class NonUniformDiscreteDist[T](valuesWeights: Map[T, Double])
 
   override val numValues: Int = valuesWeights.size
 
-  private var rng = rand
-
   /** AliasSampler to efficiently sample from the distribution */
-  private val sampler = AliasSampler(_probsArray, checkWeights = false, normalized = true)(rand = rng)
+  private val sampler = AliasSampler(_probsArray, checkWeights = false, normalized = true)
 
   //    /** Inverse CDF */
   //    private def sampleNaive(): T = {
@@ -60,20 +58,15 @@ class NonUniformDiscreteDist[T](valuesWeights: Map[T, Double])
   //      vw._1
   //    }
 
-  override def sample(): T = _valuesArray(sampler.sample())
+  override def sample()(implicit rand: RandomGenerator): T = _valuesArray(sampler.sample())
 
   override def probabilityOf(value: T): Double =
     valuesWeights.getOrElse(value, 0.0)/totalWeight
-
-  override def setRand(rand: RandomGenerator): Unit = {
-    rng = rand
-    sampler.setRand(rand)
-  }
 }
 
 object NonUniformDiscreteDist {
   def apply[T](valuesAndWeights: Map[T, Double])
-              (implicit rand: RandomGenerator, ev: ClassTag[T]): NonUniformDiscreteDist[T] = {
+              (implicit ev: ClassTag[T]): NonUniformDiscreteDist[T] = {
     new NonUniformDiscreteDist[T](valuesAndWeights)
   }
 

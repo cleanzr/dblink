@@ -55,7 +55,7 @@ trait AttributeIndex extends Serializable {
     *
     * @return a value id.
     */
-  def draw(): ValueId
+  def draw()(implicit rand: RandomGenerator): ValueId
 
 
   /** Get the value id for a given string value
@@ -65,13 +65,6 @@ trait AttributeIndex extends Serializable {
     *         index.
     */
   def valueIdxOf(value: String): ValueId
-
-
-  /** Set the random number generator
-    *
-    * @param rand a RandomGenerator
-    */
-  def setRand(rand: RandomGenerator)
 
 
   /** Get the similarity normalization corresponding to the value id.
@@ -113,7 +106,7 @@ object AttributeIndex {
   def apply(valuesWeights: Map[String, Double],
             similarityFn: SimilarityFn,
             precachePowers: Option[Traversable[Int]] = None)
-           (implicit rand: RandomGenerator, sc: SparkContext): AttributeIndex = {
+           (implicit sc: SparkContext): AttributeIndex = {
     require(valuesWeights.nonEmpty, "index cannot be empty")
 
     val valuesWeights_sorted = valuesWeights.toArray.sortBy(_._1)
@@ -132,8 +125,7 @@ object AttributeIndex {
 
   /** Implementation for attributes with constant similarity functions */
   private class ConstantAttributeIndex(protected val stringToId: Map[String, ValueId],
-                                       protected val probs: Array[Double])
-                                      (implicit rand: RandomGenerator) extends AttributeIndex {
+                                       protected val probs: Array[Double]) extends AttributeIndex {
 
     /** Empirical distribution over the field values */
     val distribution: DiscreteDist[Int] = DiscreteDist(probs)
@@ -145,11 +137,9 @@ object AttributeIndex {
       distribution.probabilityOf(valueId)
     }
 
-    override def draw(): ValueId = distribution.sample()
+    override def draw()(implicit rand: RandomGenerator): ValueId = distribution.sample()
 
     override def valueIdxOf(value: String): ValueId = stringToId(value)
-
-    override def setRand(rand: RandomGenerator): Unit = distribution.setRand(rand)
 
     /** Assuming exp(sim(v1, v2)) = 1.0 for all v1, v2 */
     override def simNormalizationOf(valueId: ValueId): Double = {
@@ -183,10 +173,7 @@ object AttributeIndex {
                                       private val simValueIndex: Array[Map[ValueId, Double]],
                                       private val simNormalizations: Array[Double],
                                       precachePowers: Option[Traversable[Int]])
-                                     (implicit rand: RandomGenerator)
-    extends ConstantAttributeIndex(stringToId, probs)(rand) {
-
-    private var rng = rand
+    extends ConstantAttributeIndex(stringToId, probs) {
 
     override def simNormalizationOf(valueId: ValueId): Double = simNormalizations(valueId)
 
@@ -197,16 +184,10 @@ object AttributeIndex {
       simValuesOf(valueId1).getOrElse(valueId2, 1.0)
     }
 
-    override def setRand(rand: RandomGenerator): Unit = {
-      this.rng = rand
-      distribution.setRand(rand)
-      cachedSimNormDist.foreach(_._2.setRand(rand))
-    }
-
     private val cachedSimNormDist = precachePowers match {
       case Some(powers) => powers.foldLeft(mutable.Map.empty[Int, DiscreteDist[Int]]) {
         case (m, power) if power > 0 =>
-          m + (power -> computeSimNormDist(probs, simNormalizations, power)(rng))
+          m + (power -> computeSimNormDist(probs, simNormalizations, power))
         case (m, _) => m
       }
       case None => mutable.Map.empty[Int, DiscreteDist[Int]]
@@ -217,7 +198,7 @@ object AttributeIndex {
       cachedSimNormDist.get(power) match {
         case Some(dist) => dist
         case None =>
-          val dist = computeSimNormDist(probs, simNormalizations, power)(rng)
+          val dist = computeSimNormDist(probs, simNormalizations, power)
           cachedSimNormDist.update(power, dist)
           dist
       }
@@ -225,10 +206,8 @@ object AttributeIndex {
   }
 
 
-  private def computeSimNormDist(probs: Array[Double],
-                                 simNormalizations: Array[Double],
-                                 power: Int)
-                                (implicit rand: RandomGenerator): DiscreteDist[Int] = {
+  private def computeSimNormDist(probs: Array[Double], simNormalizations: Array[Double],
+                                 power: Int): DiscreteDist[Int] = {
     val simNormWeights = Array.tabulate(probs.length) { valueId =>
       probs(valueId) * pow(simNormalizations(valueId), power)
     }

@@ -24,7 +24,7 @@ import org.scalatest.FlatSpec
 
 class DiscreteDistTest extends FlatSpec with DiscreteDistBehavior {
 
-  implicit val rand: RandomGenerator = new MersenneTwister
+  implicit val rand: RandomGenerator = new MersenneTwister()
 
   def valuesWeights = Map("A" -> 100.0, "B" -> 200.0, "C" -> 700.0)
   val indexDist = DiscreteDist(valuesWeights.values)

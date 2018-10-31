@@ -218,12 +218,9 @@ object State {
       .zipWithUniqueId()                                     // a unique entity id for each record
       .mapPartitionsWithIndex((partId, partition) => {       // generate latent variables
         /** Ensure we get different pseudo-random numbers on each partition */
-        implicit val rand: RandomGenerator = new MersenneTwister()
-        val newSeed = partId + randomSeed
-        rand.setSeed(newSeed.longValue())
+        implicit val rand: RandomGenerator = new MersenneTwister((partId + randomSeed).longValue())
 
-        /** Ensure attribute distributions reference the RandomGenerator */
-        bcRecordsCache.value.setRand(rand)
+        /** Convenience variable */
         val indexedAttributes = bcRecordsCache.value.indexedAttributes
 
         partition.map { case (Record(id, fileId, values), entId: EntityId) =>

@@ -19,11 +19,12 @@
 
 package com.github.ngmarchant.dblink.random
 
+import org.apache.commons.math3.random.RandomGenerator
 import org.scalatest.{FlatSpec, Matchers}
 
 trait DiscreteDistBehavior extends Matchers { this: FlatSpec =>
 
-  def genericDiscreteDist[T](dist: DiscreteDist[T], valueOutsideSupport: T): Unit = {
+  def genericDiscreteDist[T](dist: DiscreteDist[T], valueOutsideSupport: T)(implicit rand: RandomGenerator): Unit = {
     it should "be normalised" in {
       assert(dist.values.foldLeft(0.0) { case (sum, v) => sum + dist.probabilityOf(v) } === (1.0 +- 1e-9) )
     }

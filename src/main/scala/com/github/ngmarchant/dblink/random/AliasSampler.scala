@@ -22,10 +22,7 @@ package com.github.ngmarchant.dblink.random
 import com.github.ngmarchant.dblink.random.AliasSampler._
 import org.apache.commons.math3.random.RandomGenerator
 
-class AliasSampler(weights: Traversable[Double], checkWeights: Boolean, normalized: Boolean)
-                  (implicit rand: RandomGenerator) extends Serializable {
-
-  private var rng = rand
+class AliasSampler(weights: Traversable[Double], checkWeights: Boolean, normalized: Boolean) extends Serializable {
 
   def size: Int = weights.size
 
@@ -33,23 +30,19 @@ class AliasSampler(weights: Traversable[Double], checkWeights: Boolean, normaliz
 
   def probabilities: IndexedSeq[Double] = _probabilities
 
-  def sample(): Int = {
-    val U = rng.nextDouble() * size
+  def sample()(implicit rand: RandomGenerator): Int = {
+    val U = rand.nextDouble() * size
     val i = U.toInt
     if (U < _probabilities(i)) i else _aliasTable(i)
   }
 
-  def sample(sampleSize: Int): Array[Int] = {
+  def sample(sampleSize: Int)(implicit rand: RandomGenerator): Array[Int] = {
     Array.tabulate(sampleSize)(_ => this.sample())
   }
-
-  // TODO: this should probably return a new instance rather than modifying in-place
-  def setRand(rand: RandomGenerator): Unit = {this.rng = rand}
 }
 
 object AliasSampler {
-  def apply(weights: Traversable[Double], checkWeights: Boolean = true, normalized: Boolean = false)
-           (implicit rand: RandomGenerator): AliasSampler = {
+  def apply(weights: Traversable[Double], checkWeights: Boolean = true, normalized: Boolean = false): AliasSampler = {
     new AliasSampler(weights, checkWeights, normalized)
   }
 
