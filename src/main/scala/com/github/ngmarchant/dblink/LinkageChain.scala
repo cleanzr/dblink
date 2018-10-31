@@ -55,43 +55,27 @@ class LinkageChain(val rdd: RDD[LinkageState]) extends Logging {
     val sc = rdd.sparkContext
 
     /** Compute dist separately for each partition, then combine the results */
-    val distAlongChainRDD = rdd
-      .flatMap { case LinkageState(iteration, _, linkageStructure) =>
-        linkageStructure.map { case (_, recIds) => ((iteration, recIds.size), 1L) }
+    val distAlongChain = rdd
+      .map { case LinkageState(iteration, _, linkageStructure) =>
+        val clustSizes = mutable.Map[Int, Long]().withDefaultValue(0L)
+        linkageStructure.foreach { case (_, recIds) =>
+          val k = recIds.size
+          clustSizes(k) += 1L
+        }
+        (iteration, clustSizes)
       }
-      .reduceByKey((s1, s2) => s1 + s2)
-      .map { case ((iteration, clustSize), freq) => (iteration, (clustSize, freq))}
-      .aggregateByKey(Map.empty[Int, Long])(
-        seqOp = (m, v) => m + v,
-        combOp = (m1, m2) => m1 ++ m2
-      )
-//      .map(linkageState => {
-//        val linkageStructure = linkageState.linkageStructure
-//        val iteration = linkageState.iteration
-//        val clustSizes = mutable.HashMap.empty[Int, Long]
-//        linkageStructure.foreach { case (_, recIds) =>
-//          val k = recIds.size
-//          clustSizes.update(k, clustSizes.getOrElse(k, 0L) + 1L)
-//        }
-//        (iteration, clustSizes)
-//      })
-//      .reduceByKey((a, b) => {
-//        val combined = mutable.HashMap.empty[Int, Long]
-//        (a.keySet ++ b.keySet).foreach(k => combined(k) = a.getOrElse(k, 0L) + b.getOrElse(k, 0L))
-//        combined // combine maps
-//      })
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .reduceByKey((a, b) => {
+        val combined = mutable.Map[Int, Long]().withDefaultValue(0L)
+        (a.keySet ++ b.keySet).foreach(k => combined(k) = a(k) + b(k))
+        combined // combine maps
+      })
+      .collect().sortBy(_._1) // collect on driver and sort by iteration
 
     /** Get the size of the largest cluster in the samples */
-    val maxClustSize = distAlongChainRDD.aggregate(0)(
-      seqOp = (currentMax, x) => math.max(currentMax, x._2.keySet.max),
-      combOp = (a, b) => math.max(a, b)
+    val maxClustSize = distAlongChain.aggregate(0)(
+      seqop = (currentMax, x) => math.max(currentMax, x._2.keySet.max),
+      combop = (a, b) => math.max(a, b)
     )
-
-    /** Collect and sort by iteration */
-    val distAlongChain = distAlongChainRDD.collect().sortBy(_._1)
-    distAlongChainRDD.unpersist()
-
     /** Output file can be created from Hadoop file system. */
     val fullPath = path + "cluster-size-distribution.csv"
     info(s"Writing cluster size frequency distribution along the chain to $fullPath")
