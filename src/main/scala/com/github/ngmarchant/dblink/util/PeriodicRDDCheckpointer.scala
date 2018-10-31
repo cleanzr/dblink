@@ -77,7 +77,7 @@ class PeriodicRDDCheckpointer[T](checkpointInterval: Int,
                                  sc: SparkContext)
   extends PeriodicCheckpointer[RDD[T]](checkpointInterval, sc) {
 
-  override protected def checkpoint(data: RDD[T]): Unit = data.localCheckpoint()
+  override protected def checkpoint(data: RDD[T]): Unit = data.checkpoint()
 
   override protected def isCheckpointed(data: RDD[T]): Boolean = data.isCheckpointed
 
