@@ -119,7 +119,8 @@ object GibbsUpdates {
                        bcPartitionFunction: Broadcast[PartitionFunction[ValueId]],
                        bcRecordsCache: Broadcast[RecordsCache],
                        collapsedEntityId: Boolean,
-                       collapsedEntityValues: Boolean): Partitions = {
+                       collapsedEntityValues: Boolean,
+                       sequential: Boolean): Partitions = {
     partitions.mapPartitionsWithIndex { (index, partition) =>
       /** Convenience variables */
       val recordsCache = bcRecordsCache.value
@@ -129,7 +130,7 @@ object GibbsUpdates {
       val newSeed = iteration + index + randomSeed + 1L
       implicit val rand: RandomGenerator = new MersenneTwister(newSeed.longValue())
 
-      updatePartition(partition, bcDistProbs.value, bcPartitionFunction.value, recordsCache, collapsedEntityId, collapsedEntityValues)
+      updatePartition(partition, bcDistProbs.value, bcPartitionFunction.value, recordsCache, collapsedEntityId, collapsedEntityValues, sequential)
     }.partitionBy(partitioner) // Move entity clusters to newly-assigned partitions
      //.persist(StorageLevel.MEMORY_ONLY_SER)
   }
@@ -142,7 +143,8 @@ object GibbsUpdates {
                       partitionFunction: PartitionFunction[ValueId],
                       recordsCache: RecordsCache,
                       collapsedEntityId: Boolean,
-                      collapsedEntityValues: Boolean)
+                      collapsedEntityValues: Boolean,
+                      sequential: Boolean)
                      (implicit rand: RandomGenerator): Iterator[(PartitionId, EntRecPair)] = {
     /** Convenience variables */
     val indexedAttributes = recordsCache.indexedAttributes
@@ -156,14 +158,22 @@ object GibbsUpdates {
     val bRecords = ArrayBuffer.empty[Record[DistortedValue]]
     val entities = mutable.LongMap.empty[Entity]
     val entityInvertedIndex = new EntityInvertedIndex
-    itPartition.foreach { case (_, EntRecPair(entity, record)) =>
-      if (record.isDefined) bRecords += record.get
-      entities.put(entity.id, entity) match {
-        case Some(_) =>
+    if (!sequential) {
+      itPartition.foreach { case (_, EntRecPair(entity, record)) =>
+        if (record.isDefined) bRecords += record.get
+        entities.put(entity.id, entity) match {
+          case Some(_) =>
           // Already seen this entity before. Nothing to do.
-        case None =>
-          // Haven't seen this entity before. Add it to the inverted index
-          entityInvertedIndex.add(entity)
+          case None =>
+            // Haven't seen this entity before. Add it to the inverted index
+            entityInvertedIndex.add(entity)
+        }
+      }
+    } else {
+      /** Inverted index for the entities is not required */
+      itPartition.foreach { case (_, EntRecPair(entity, record)) =>
+        if (record.isDefined) bRecords += record.get
+        entities.update(entity.id, entity)
       }
     }
     val records = bRecords.toArray
@@ -175,16 +185,14 @@ object GibbsUpdates {
       */
     val linksIndex = new LinksIndex(entities.keysIterator, records.length)
     records.iterator.zipWithIndex.foreach { case (record, rowId) =>
-      val entId = if (collapsedEntityId) {
-        updateEntityIdCollapsed(records(rowId), entities, entityInvertedIndex, recordsCache, distProbs)
-      } else {
-        updateEntityId(records(rowId), entities, entityInvertedIndex, recordsCache)
-      }
+      val entId = if (sequential) updateEntityIdSeq(records(rowId), entities, recordsCache)
+      else if (collapsedEntityId) updateEntityIdCollapsed(records(rowId), entities, entityInvertedIndex, recordsCache, distProbs)
+      else updateEntityId(records(rowId), entities, entityInvertedIndex, recordsCache)
       linksIndex.addLink(entId, rowId)
     }
 
     /** Update entity attribute values and store in a map (entId -> Entity) */
-    val newEntities = updateEntityValues(records, linksIndex, distProbs, recordsCache, collapsedEntityValues)
+    val newEntities = updateEntityValues(records, linksIndex, distProbs, recordsCache, collapsedEntityValues, sequential)
 
     /** Build output iterator over entity-record pairs (separately for the
       * entity-record pairs and isolated entities) */
@@ -637,16 +645,21 @@ object GibbsUpdates {
                          linksIndex: LinksIndex,
                          distProbs: DistortionProbs,
                          recordsCache: RecordsCache,
-                         collapsedEntityValues: Boolean)
+                         collapsedEntityValues: Boolean,
+                         sequential: Boolean)
                         (implicit rand: RandomGenerator): mutable.LongMap[Entity] = {
     val newEntities = mutable.LongMap.empty[Entity] // TODO: use builder?
     linksIndex.toIterator.foreach { case (entId, linkedRowIds) =>
       val entityValues = Array.tabulate(recordsCache.numAttributes) { attrId =>
         val indexedAttribute = recordsCache.indexedAttributes(attrId)
-        if (collapsedEntityValues) {
-          updateEntityValueCollapsed(attrId, indexedAttribute, records, linkedRowIds, distProbs)
+        if (sequential) {
+          updateEntityValueSeq(attrId, indexedAttribute, records, linkedRowIds)
         } else {
-          updateEntityValue(attrId, indexedAttribute, records, linkedRowIds)
+          if (collapsedEntityValues) {
+            updateEntityValueCollapsed(attrId, indexedAttribute, records, linkedRowIds, distProbs)
+          } else {
+            updateEntityValue(attrId, indexedAttribute, records, linkedRowIds)
+          }
         }
       }
       newEntities += (entId -> Entity(entId, entityValues))

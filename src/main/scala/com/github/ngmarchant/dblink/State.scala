@@ -68,17 +68,19 @@ case class State(iteration: Long,
     * @param checkpointer whether to checkpoint the RDD.
     * @param collapsedEntityIds whether to do a partially-collapsed update for the entity ids (default: false)
     * @param collapsedEntityValues whether to do a partially-collapsed update for the entity values (default: true)
+    * @param sequential
     * @return new State after applying the transition operator.
     */
   def nextState(checkpointer: PeriodicRDDCheckpointer[(PartitionId, EntRecPair)],
                 collapsedEntityIds: Boolean = false,
-                collapsedEntityValues: Boolean = true): State = {
+                collapsedEntityValues: Boolean = true,
+                sequential: Boolean = false): State = {
     /** Update distortion probabilities and broadcast */
     val newDistProbs = updateDistProbs(summaryVars, bcRecordsCache.value)
     val bcDistProbs = partitions.sparkContext.broadcast(newDistProbs)
 
     val newPartitions = updatePartitions(iteration, partitions, bcDistProbs,
-      partitioner, randomSeed, bcPartitionFunction, bcRecordsCache, collapsedEntityIds, collapsedEntityValues)
+      partitioner, randomSeed, bcPartitionFunction, bcRecordsCache, collapsedEntityIds, collapsedEntityValues, sequential)
     /** If handling persistence here, may want to set this:
       * .persist(StorageLevel.MEMORY_ONLY_SER) */
     checkpointer.update(newPartitions)

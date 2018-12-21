@@ -31,7 +31,7 @@ trait ProjectStep {
 }
 
 object ProjectStep {
-  private val supportedSamplers = Set("PCG-I", "PCG-II", "Gibbs")
+  private val supportedSamplers = Set("PCG-I", "PCG-II", "Gibbs", "Gibbs-Sequential")
   private val supportedEvaluationMetrics = Set("pairwise", "cluster")
   private val supportedSummaryQuantities = Set("cluster-size-distribution", "partition-sizes")
 
@@ -50,9 +50,10 @@ object ProjectStep {
         project.generateInitialState
       }
       sampler match {
-        case "PCG-I" => Sampler.sample(initialState, sampleSize, project.outputPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = false, collapsedEntityValues = true)
-        case "PCG-II" => Sampler.sample(initialState, sampleSize, project.outputPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = true, collapsedEntityValues = true)
-        case "Gibbs" => Sampler.sample(initialState, sampleSize, project.outputPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = false, collapsedEntityValues = false)
+        case "PCG-I" => Sampler.sample(initialState, sampleSize, project.outputPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = false, collapsedEntityValues = true, sequential = false)
+        case "PCG-II" => Sampler.sample(initialState, sampleSize, project.outputPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = true, collapsedEntityValues = true, sequential = false)
+        case "Gibbs" => Sampler.sample(initialState, sampleSize, project.outputPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = false, collapsedEntityValues = false, sequential = false)
+        case "Gibbs-Sequential" => Sampler.sample(initialState, sampleSize, project.outputPath, burninInterval=burninInterval, thinningInterval=thinningInterval, collapsedEntityIds = false, collapsedEntityValues = false, sequential = true)
       }
     }
 

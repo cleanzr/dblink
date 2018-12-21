@@ -56,7 +56,8 @@ object Sampler extends Logging {
              checkpointInterval: Int = 20,
              writeBufferSize: Int = 10,
              collapsedEntityIds: Boolean = false,
-             collapsedEntityValues: Boolean = true): State = {
+             collapsedEntityValues: Boolean = true,
+             sequential: Boolean = false): State = {
     require(sampleSize > 0, "`sampleSize` must be positive.")
     require(burninInterval >= 0, "`burninInterval` must be non-negative.")
     require(thinningInterval > 0, "`thinningInterval` must be positive.")
@@ -89,7 +90,7 @@ object Sampler extends Logging {
 
     if (burninInterval > 0) info(s"Running burn-in for $burninInterval iterations.")
     while (sampleCtr < sampleSize) {
-      state = state.nextState(checkpointer = checkpointer, collapsedEntityIds, collapsedEntityValues)
+      state = state.nextState(checkpointer = checkpointer, collapsedEntityIds, collapsedEntityValues, sequential)
 
       //newState.partitions.persist(StorageLevel.MEMORY_ONLY_SER)
       //state = newState
