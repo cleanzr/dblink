@@ -73,7 +73,6 @@ object GibbsUpdates {
 
 
 
-  // ------------------------------------------------------------------------ //
   /** An index from entity ids to row ids
     * Rows corresponding to isolated entities (i.e. not records) are omitted
     */
@@ -110,7 +109,9 @@ object GibbsUpdates {
     def getLinkedEntity(rowId: Int): EntityId = rowIdToEntId(rowId)
   }
 
-  // ------------------------------------------------------------------------ //
+
+
+  /** Updates all partitions */
   def updatePartitions(iteration: Long,
                        partitions: Partitions,
                        bcDistProbs: Broadcast[DistortionProbs],
@@ -136,8 +137,7 @@ object GibbsUpdates {
   }
 
 
-
-  // ------------------------------------------------------------------------ //
+  /** Updates a single partition */
   def updatePartition(itPartition: Iterator[(PartitionId, EntRecPair)],
                       distProbs: DistortionProbs,
                       partitionFunction: PartitionFunction[ValueId],
@@ -217,9 +217,11 @@ object GibbsUpdates {
   }
 
 
-  // ------------------------------------------------------------------------ //
   // Modifies accumulators in-place (doesn't matter because we don't use them
   // anywhere else)
+  /** Updates summary variables (aggregate distortion per file/attribute, log-likelihood, number of
+    * isolated entities) for a given state
+    */
   def updateSummaryVariables(partitions: Partitions,
                              accumulators: SummaryAccumulators,
                              bcDistProbs: Broadcast[DistortionProbs],
@@ -312,9 +314,7 @@ object GibbsUpdates {
   }
 
 
-
-  // ------------------------------------------------------------------------ //
-  // Warning: updates rand in-place
+  /** Updates distortion probabilities (on driver) */
   def updateDistProbs(summaryVars: SummaryVars,
                       recordsCache: RecordsCache)
                      (implicit rand: RandomGenerator): DistortionProbs = {
@@ -333,9 +333,7 @@ object GibbsUpdates {
   }
 
 
-
-  // ------------------------------------------------------------------------ //
-  // Warning: updates rand in-place
+  /** Updates distortions for a given record */
   def updateDistortions(entity: Entity,
                         record: Record[DistortedValue],
                         distProbs: DistortionProbs,
@@ -373,6 +371,8 @@ object GibbsUpdates {
     record.copy(values = newValues)
   }
 
+
+  /** Updates assigned entity for a given record, while collapsing the distortions for the record */
   def updateEntityIdCollapsed(record: Record[DistortedValue],
                               entities: mutable.LongMap[Entity],
                               entityInvertedIndex: EntityInvertedIndex,
@@ -380,7 +380,6 @@ object GibbsUpdates {
                               distProbs: DistortionProbs)
                              (implicit rand: RandomGenerator): EntityId = {
     val indexedAttributes = recordsCache.indexedAttributes
-    //val entIds = entities.keys.toArray
     val valuesAndWeights = entities.mapValues { entity =>
       entity.values.iterator.zipWithIndex.foldLeft(1.0) { case (weight, (entValue, attrId)) =>
         val recValue = record.values(attrId).value
@@ -408,6 +407,8 @@ object GibbsUpdates {
     DiscreteDist(valuesAndWeights).sample()
   }
 
+
+  /** Updates assigned entity for a given record using an ordinary Gibbs update */
   def updateEntityId(record: Record[DistortedValue],
                      entities: mutable.LongMap[Entity],
                      entityInvertedIndex: EntityInvertedIndex,
@@ -443,6 +444,47 @@ object GibbsUpdates {
     }
   }
 
+
+  /** Updates assigned entity for a given record using an ordinary Gibbs update (without using an inverted index)  */
+  def updateEntityIdSeq(record: Record[DistortedValue],
+                        entities: mutable.LongMap[Entity],
+                        recordsCache: RecordsCache)
+                       (implicit rand: RandomGenerator): EntityId = {
+
+    val entitiesAndWeights = entities.keys.map { entId =>
+      var weight = 1.0
+      var attrId = 0
+      val itRecordValues = record.values.iterator
+      val entValues = entities(entId).values
+      while (itRecordValues.hasNext && weight > 0) {
+        val distRecValue = itRecordValues.next()
+        if (distRecValue.value >= 0) {
+          // Record attribute is observed
+          val entValue = entValues(attrId)
+          if (!distRecValue.distorted) {
+            if (distRecValue.value != entValue) weight = 0.0
+          } else {
+            val indexedAttribute = recordsCache.indexedAttributes(attrId)
+            val index = indexedAttribute.index
+            if (indexedAttribute.isConstant) {
+              weight *= index.probabilityOf(distRecValue.value)
+            } else {
+              weight *= index.simNormalizationOf(entValue) * index.expSimOf(distRecValue.value, entValue) * index.probabilityOf(distRecValue.value)
+            }
+          }
+        }
+        attrId += 1
+      }
+      (entId, weight)
+    }.toMap
+    DiscreteDist(entitiesAndWeights).sample()
+  }
+
+
+  /** Computes a set of candidate entities for a given record, which are compatible with the attributes/distortions.
+    * For example, if the first record attribute has a non-distorted value of "10", we can immediately eliminate
+    * any entities whose first attribute value is not "10".
+    */
   def getPossibleEntities(record: Record[DistortedValue],
                           allEntityIds: Iterator[EntityId],
                           entityInvertedIndex: EntityInvertedIndex,
@@ -503,6 +545,8 @@ object GibbsUpdates {
     }
   }
 
+
+  /** Computes the perturbation distribution corresponding to updateEntityValueCollapsed */
   def perturbedDistYCollapsed(attrId: AttributeId,
                               constAttr: Boolean,
                               attributeIndex: AttributeIndex,
@@ -543,6 +587,10 @@ object GibbsUpdates {
     DiscreteDist(valuesWeights)
   }
 
+
+  /** Updates an attribute value for a given entity (represented by a set of linked records).
+    * Collapses the distortion indicators and uses perturbation sampling.
+    */
   def updateEntityValueCollapsed(attrId: AttributeId,
                                  indexedAttribute: IndexedAttribute,
                                  records: Array[Record[DistortedValue]],
@@ -568,6 +616,10 @@ object GibbsUpdates {
     }
   }
 
+
+  /** Updates an attribute value for a given entity (represented by a set of linked records).
+    * Uses a Gibbs update with perturbation sampling.
+    */
   def updateEntityValue(attrId: AttributeId,
                         indexedAttribute: IndexedAttribute,
                         records: Array[Record[DistortedValue]],
@@ -611,6 +663,60 @@ object GibbsUpdates {
     }
   }
 
+
+  /** Updates an attribute value for a given entity (represented by a set of linked records).
+    * Uses a Gibbs update without perturbation sampling.
+    */
+  def updateEntityValueSeq(attrId: AttributeId,
+                           indexedAttribute: IndexedAttribute,
+                           records: Array[Record[DistortedValue]],
+                           linkedRowIds: Traversable[Int])
+                          (implicit rand: RandomGenerator): ValueId = {
+    val observedLinkedRowIds = linkedRowIds.filter(rowId => records(rowId).values(attrId).value >= 0)
+    val index = indexedAttribute.index
+    val constAttribute = indexedAttribute.isConstant
+
+    if (observedLinkedRowIds.isEmpty) {
+      index.draw()
+    } else {
+      var nonDistortedValue: ValueId = -1
+      val itLinkedRowIds = observedLinkedRowIds.toIterator
+      while (itLinkedRowIds.hasNext && nonDistortedValue < 0) {
+        val rowId = itLinkedRowIds.next()
+        val distRecValue = records(rowId).values(attrId)
+        if (!distRecValue.distorted) nonDistortedValue = distRecValue.value
+      }
+
+      if (nonDistortedValue >= 0) {
+        /** Observed, non-distorted value exists, so the new value is determined */
+        nonDistortedValue
+      } else {
+        /** All observed linked record values are distorted for this attribute. */
+        if (constAttribute) {
+          index.draw()
+        } else {
+          val valuesAndWeights = index.distribution.toIterator.map { case (valId, prob) =>
+            var weight = prob
+            val itLinkedRowIds = observedLinkedRowIds.toIterator
+            while (itLinkedRowIds.hasNext && weight > 0) {
+              val rowId = itLinkedRowIds.next()
+              val distRecValue = records(rowId).values(attrId)
+              if (!distRecValue.distorted) {
+                if (distRecValue.value != valId) weight = 0.0
+              } else {
+                weight *= index.expSimOf(distRecValue.value, valId) * index.simNormalizationOf(valId) * index.probabilityOf(distRecValue.value)
+              }
+            }
+            (valId, weight)
+          }.toMap
+          DiscreteDist(valuesAndWeights).sample()
+        }
+      }
+    }
+  }
+
+
+  /** Computes the perturbation distribution corresponding to updateEntityValue */
   def perturbedDistY(attrId: AttributeId,
                      attributeIndex: AttributeIndex,
                      records: Array[Record[DistortedValue]],
@@ -639,8 +745,8 @@ object GibbsUpdates {
     DiscreteDist(valuesWeights)
   }
 
-  // ------------------------------------------------------------------------ //
-  // Warning: updates valuesDist in-place
+
+  /** Updates the attribute values for all entities */
   def updateEntityValues(records: Array[Record[DistortedValue]],
                          linksIndex: LinksIndex,
                          distProbs: DistortionProbs,
