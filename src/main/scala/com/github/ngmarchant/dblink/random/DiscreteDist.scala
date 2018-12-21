@@ -53,9 +53,9 @@ trait DiscreteDist[T] extends Serializable {
     */
   def probabilityOf(value: T): Double
 
-  /* Iterator over the values in the support, together with their probability
-   * mass
-   */
+  /** Iterator over the values in the support, together with their probability
+    * mass
+    */
   def toIterator: Iterator[(T, Double)]
 }
 
