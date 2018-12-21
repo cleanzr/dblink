@@ -22,7 +22,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 object Launch {
   def main(args: Array[String]) {
-    val conf = new SparkConf().setMaster("local[*]").setAppName("dblink")
+    val conf = new SparkConf().setMaster("local[2]").setAppName("dblink")
     val sc = SparkContext.getOrCreate(conf)
     Run.main(args)
   }
