@@ -32,7 +32,7 @@ object Sampler extends Logging {
     * @param sampleSize A positive integer specifying the desired number of samples (after burn-in and thinning)
     * @param outputPath A string specifying the path to save output (includes samples and diagnostics). HDFS and
     *                   local filesystems are supported.
-    * @param burninInterval A positive integer specifying the number of initial samples to discard as burn-in.
+    * @param burninInterval A non-negative integer specifying the number of initial samples to discard as burn-in.
     *                       The default is 0, which means no burn-in is applied.
     * @param thinningInterval A positive integer specifying the period for saving samples to disk. The default value is
     *                         1, which means no thinning is applied.
