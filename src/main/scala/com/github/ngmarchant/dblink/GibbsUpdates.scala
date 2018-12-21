@@ -406,23 +406,28 @@ object GibbsUpdates {
                      recordsCache: RecordsCache)
                     (implicit rand: RandomGenerator): EntityId = {
 
-    val (possibleEntityIds, obsDistNonConstAttrIds) = getPossibleEntities(record, entities.keysIterator,
+    val (possibleEntityIds, obsDistAttrIds) = getPossibleEntities(record, entities.keysIterator,
       entityInvertedIndex, recordsCache.indexedAttributes)
 
-    if (obsDistNonConstAttrIds.isEmpty) {
-      /** No observed, distorted, non-constant record attributes implies distribution over possible entity
+    if (obsDistAttrIds.isEmpty) {
+      /** No observed, distorted record attributes implies distribution over possible entity
         * ids is uniform */
       val uniformIdx = rand.nextInt(possibleEntityIds.length)
       possibleEntityIds(uniformIdx)
     } else {
-      /** Some observed, distorted, non-constant record attributes implies distribution over possible entity
+      /** Some observed, distorted record attributes implies distribution over possible entity
         * ids is non-uniform */
       val weights = possibleEntityIds.map { entId =>
-        obsDistNonConstAttrIds.foldLeft(1.0) { (weight, attrId) =>
+        obsDistAttrIds.foldLeft(1.0) { (weight, attrId) =>
           val entValue = entities(entId).values(attrId)
           val distRecValue = record.values(attrId)
-          val attributeIndex = recordsCache.indexedAttributes(attrId).index
-          weight * attributeIndex.simNormalizationOf(entValue) * attributeIndex.expSimOf(distRecValue.value, entValue)
+          val indexedAttribute = recordsCache.indexedAttributes(attrId)
+          val attributeIndex = indexedAttribute.index
+          if (indexedAttribute.isConstant) {
+            weight * attributeIndex.probabilityOf(distRecValue.value)
+          } else {
+            weight * attributeIndex.simNormalizationOf(entValue) * attributeIndex.expSimOf(distRecValue.value, entValue) * attributeIndex.probabilityOf(distRecValue.value)
+          }
         }
       }
       val randIdx = DiscreteDist(weights).sample()
@@ -436,8 +441,8 @@ object GibbsUpdates {
                           indexedAttributes: IndexedSeq[IndexedAttribute]):
       (IndexedSeq[EntityId], Seq[AttributeId]) = {
 
-    /** Keep track of any observed, distorted record attributes with a non-constant similarity fn */
-    val obsDistNonConstAttrIds = mutable.ArrayBuffer.empty[AttributeId]
+    /** Keep track of any observed, distorted record attributes */
+    val obsDistAttrIds = mutable.ArrayBuffer.empty[AttributeId]
 
     /** Build an array of sets of entity ids (one set for each observed, non-distorted record attribute) */
     val bSets = Array.newBuilder[scala.collection.Set[EntityId]]
@@ -447,8 +452,8 @@ object GibbsUpdates {
       if (distRecValue.value >= 0) { // Record attribute is observed
         if (!distRecValue.distorted) { // Record attribute is not distorted
           bSets += entityInvertedIndex.getEntityIds(attrId, distRecValue.value)
-        } else if (!indexedAttributes(attrId).isConstant) { // Record attribute is distorted and non-constant
-          obsDistNonConstAttrIds += attrId
+        } else { // Record attribute is distorted
+          obsDistAttrIds += attrId
         }
       }
       attrId += 1
@@ -461,10 +466,10 @@ object GibbsUpdates {
     /** Now compute the multiple set intersection, but first handle special cases */
     if (sets.isEmpty) {
       /** All of the record attributes are distorted or unobserved, so return all entity ids as possibilities */
-      (allEntityIds.toIndexedSeq, obsDistNonConstAttrIds)
+      (allEntityIds.toIndexedSeq, obsDistAttrIds)
     } else if (sets.length == 1) {
       /** No need to compute intersection for a single set */
-      (sets.head.toIndexedSeq, obsDistNonConstAttrIds)
+      (sets.head.toIndexedSeq, obsDistAttrIds)
     } else {
       /** ArrayBuffer to store result of the multiple set intersection */
       var result = mutable.ArrayBuffer.empty[EntityId]
@@ -486,7 +491,7 @@ object GibbsUpdates {
         i += 1
       }
 
-      (result, obsDistNonConstAttrIds)
+      (result, obsDistAttrIds)
     }
   }
 
