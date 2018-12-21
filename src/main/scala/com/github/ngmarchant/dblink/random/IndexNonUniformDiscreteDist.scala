@@ -52,6 +52,10 @@ class IndexNonUniformDiscreteDist(weights: Traversable[Double]) extends Discrete
     if (idx < 0 || idx >= numValues) 0.0
     else _probsArray(idx)
   }
+
+  override def toIterator: Iterator[(Int, Double)] = {
+    (0 until numValues).zip(_probsArray).toIterator
+  }
 }
 
 object IndexNonUniformDiscreteDist {

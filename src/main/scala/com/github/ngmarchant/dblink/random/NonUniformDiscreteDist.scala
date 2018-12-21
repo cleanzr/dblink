@@ -62,6 +62,10 @@ class NonUniformDiscreteDist[T](valuesWeights: Map[T, Double])
 
   override def probabilityOf(value: T): Double =
     valuesWeights.getOrElse(value, 0.0)/totalWeight
+
+  override def toIterator: Iterator[(T, Double)] = {
+    (_valuesArray,_probsArray).zipped.toIterator
+  }
 }
 
 object NonUniformDiscreteDist {

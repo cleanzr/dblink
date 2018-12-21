@@ -52,6 +52,11 @@ trait DiscreteDist[T] extends Serializable {
     * @return probability. Returns 0.0 if the value is not in the support set.
     */
   def probabilityOf(value: T): Double
+
+  /* Iterator over the values in the support, together with their probability
+   * mass
+   */
+  def toIterator: Iterator[(T, Double)]
 }
 
 object DiscreteDist {
