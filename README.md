@@ -4,7 +4,7 @@
 It's based on a Bayesian model called `blink` 
 [(Steorts, 2015)](https://projecteuclid.org/euclid.ba/1441790411), 
 with extensions proposed in
-[(Marchant et al., 2018)](https://TODO).
+[(Marchant et al., 2019)](https://TODO).
 Unlike many ER algorithms, `dblink` approximates the full posterior 
 distribution over clusterings of records (into entities).
 This facilitates propagation of uncertainty to post-ER analysis, 
@@ -71,4 +71,5 @@ the dblink config file).
 GPL-3
 
 ## Citing the package
-**TODO**
+Marchant, N. G., Steorts R. C., Kaplan, A., Rubinstein, B. I. P., Elazar, D. N. 
+(2019). dblink: Distributed End-to-End Bayesian Entity Resolution. _TODO_, ?-?.
