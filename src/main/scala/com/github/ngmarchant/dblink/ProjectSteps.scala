@@ -56,9 +56,9 @@ object ProjectSteps {
         case "sample" =>
           new SampleStep(project,
             sampleSize = step.getInt("parameters.sampleSize"),
-            burninInterval = step.getInt("parameters.burninInterval"),
-            thinningInterval = step.getInt("parameters.thinningInterval"),
-            resume = step.getBoolean("parameters.resume"),
+            burninInterval = Try {step.getInt("parameters.burninInterval")} getOrElse 0,
+            thinningInterval = Try {step.getInt("parameters.thinningInterval")} getOrElse 1,
+            resume = Try {step.getBoolean("parameters.resume")} getOrElse true,
             sampler = Try {step.getString("parameters.sampler")} getOrElse "PCG-I")
         case "evaluate" =>
           new EvaluateStep(project,
