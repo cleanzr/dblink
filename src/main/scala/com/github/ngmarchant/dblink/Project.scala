@@ -198,27 +198,27 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
 
 object Project {
   def apply(config: Config): Project = {
-    val dataPath = config.getString("dblink.dataPath")
+    val dataPath = config.getString("dblink.data.path")
 
     val dataFrame: DataFrame = {
       val spark = SparkSession.builder().getOrCreate()
       spark.read.format("csv")
         .option("header", "true")
         .option("mode", "DROPMALFORMED")
-        .option("nullValue", config.getString("dblink.nullValue"))
-        .load(config.getString("dblink.dataPath"))
+        .option("nullValue", config.getString("dblink.data.nullValue"))
+        .load(dataPath)
     }
 
     val matchingAttributes =
-      parseMatchingAttributes(config.getObjectList("dblink.matchingAttributes"))
+      parseMatchingAttributes(config.getObjectList("dblink.data.matchingAttributes"))
 
     Project(
       dataPath = dataPath,
       outputPath = config.getString("dblink.outputPath"),
       checkpointPath = config.getString("dblink.checkpointPath"),
-      recIdAttribute = config.getString("dblink.identifierAttributes.record"),
-      fileIdAttribute = Try {Some(config.getString("dblink.identifierAttributes.file"))} getOrElse None,
-      entIdAttribute = Try {Some(config.getString("dblink.identifierAttributes.entity"))} getOrElse None,
+      recIdAttribute = config.getString("dblink.data.recordIdentifier"),
+      fileIdAttribute = Try {Some(config.getString("dblink.data.fileIdentifier"))} getOrElse None,
+      entIdAttribute = Try {Some(config.getString("dblink.data.entityIdentifier"))} getOrElse None,
       matchingAttributes = matchingAttributes,
       partitionFunction = parsePartitioner(config.getConfig("dblink.partitioner"), matchingAttributes.map(_.name)),
       randomSeed = config.getLong("dblink.randomSeed"),
@@ -234,7 +234,7 @@ object Project {
       val simFn = c.getString("similarityFunction.name") match {
         case "ConstantSimilarityFn" => ConstantSimilarityFn
         case "LevenshteinSimilarityFn" =>
-          LevenshteinSimilarityFn(c.getDouble("similarityFunction.properties.threshold"), c.getDouble("similarityFunction.properties.maxSimilarity"))
+          LevenshteinSimilarityFn(c.getDouble("similarityFunction.parameters.threshold"), c.getDouble("similarityFunction.parameters.maxSimilarity"))
         case _ => throw new ConfigException.BadValue(c.origin(), "similarityFunction.name", "unsupported value")
       }
       val distortionPrior = BetaShapeParameters(
@@ -247,8 +247,8 @@ object Project {
 
   private def parsePartitioner(config: Config, attributeNames: Seq[String]): KDTreePartitioner[ValueId] = {
     if (config.getString("name") == "KDTreePartitioner") {
-      val numLevels = config.getInt("properties.numLevels")
-      val attributeIds = config.getStringList("properties.matchingAttributes").asScala.map( n =>
+      val numLevels = config.getInt("parameters.numLevels")
+      val attributeIds = config.getStringList("parameters.matchingAttributes").asScala.map( n =>
         attributeNames.indexOf(n)
       )
       KDTreePartitioner[ValueId](numLevels, attributeIds)
