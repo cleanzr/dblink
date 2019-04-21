@@ -130,7 +130,6 @@ $ spark-submit ... dblink.conf
     "summarize", "evaluate" and "copy-files". See the next section for 
     details.
   </td>
-  <td></td>
 </tr>
 </table>
 
