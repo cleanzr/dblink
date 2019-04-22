@@ -56,11 +56,11 @@ sbt (and Scala) on your system. Instructions are available for Windows,
 Mac and Linux in the sbt 
 [documentation](https://www.scala-sbt.org/1.x/docs/Setup.html).
 
-Once you've installed sbt, get the source code from GitHub:
+Once you've installed sbt, get the dblink source code from GitHub:
 ```bash
 $ git clone git@github.com:ngmarchant/dblink.git
 ```
-Then change into the dblink directory and run build the package
+Then change into the dblink directory and build the package
 ```bash
 $ cd dblink
 $ sbt assembly
@@ -69,7 +69,7 @@ This should produce a fat JAR at `./target/scala-2.11/dblink-assembly-0.1.jar`.
 
 ## 4. Run dblink
 Everything should now be in place to run dblink. As a test, you can try running 
-the example provided in the source code for the RLdata500 data set.
+the example provided with the source code for the RLdata500 data set.
 From within the `examples` directory, run the following command:
 ```bash
 $SPARK_HOME/bin/spark-submit \
