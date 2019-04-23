@@ -75,6 +75,8 @@ Check to make sure that sbt installed correctly (Linus and MacOS).
 $ sbt
 ```
 
+Once you have successfully installed sbt, leave the sbt prompt by entering control C. 
+
 Once you've installed sbt, get the dblink source code from GitHub:
 ```bash
 $ git clone git@github.com:ngmarchant/dblink.git
