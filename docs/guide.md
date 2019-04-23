@@ -67,6 +67,10 @@ $ sbt assembly
 ```
 This should produce a fat JAR at `./target/scala-2.11/dblink-assembly-0.1.jar`.
 
+_Note: [IntelliJ IDEA](https://www.jetbrains.com/idea/) can also be used to 
+build the fat JAR. It is arguably more user-friendly as it has a GUI and 
+users can avoid installing sbt._
+
 ## 4. Run dblink
 Everything should now be in place to run dblink. As a test, you can try running 
 the example provided with the source code for the RLdata500 data set.
