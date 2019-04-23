@@ -37,11 +37,22 @@ $ sudo ln -s /opt/spark-2.3.1-bin-hadoop2.7/ /opt/spark
 ```
 Define the `SPARK_HOME` variable and add the Spark binaries to your PATH. 
 This can be done for your user account by adding the following lines to 
-the end of your `.profile` file:
+the end of your `.profile` (bash profile) file:
+
+NOTE: Look up terminology for bash profile as this might be confusing. 
+
 ```
 export SPARK_HOME=/opt/spark
 export PATH=$PATH:$SPARK_HOME/bin
 ```
+
+After appending these two lines, run the following command from the console in order to update the 
+profile (NOTE: say this properly). 
+
+```
+$ sh .bash_profile 
+```
+
 
 ## 3. Obtain the dblink JAR file
 In this step you'll obtain the dblink fat JAR, which will have file name 
