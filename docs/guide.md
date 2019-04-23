@@ -4,6 +4,8 @@
 You will need to install Java on your system. Instructions are available 
 [here](https://java.com/en/download/help/download_options.xml).
 
+TODO: Check whether java is installed (Linux and Mac, "java -version"). 
+
 ## 2. Install Apache Spark
 You will need to ensure the correct version of Spark is installed on your 
 hardware. Installing Spark locally on a single machine is relatively 
