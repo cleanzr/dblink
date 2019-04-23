@@ -69,6 +69,12 @@ sbt (and Scala) on your system. Instructions are available for Windows,
 Mac and Linux in the sbt 
 [documentation](https://www.scala-sbt.org/1.x/docs/Setup.html).
 
+Check to make sure that sbt installed correctly (Linus and MacOS).
+
+```
+$ sbt
+```
+
 Once you've installed sbt, get the dblink source code from GitHub:
 ```bash
 $ git clone git@github.com:ngmarchant/dblink.git
