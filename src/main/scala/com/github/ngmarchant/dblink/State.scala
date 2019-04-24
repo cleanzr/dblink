@@ -216,8 +216,32 @@ object State {
       * - distortion: no distortion
       * - entity values: copied directly from the records (missing generated randomly)
       */
+    // Compute number of entities per partition
+    val numRecsPartition = records.mapPartitions(x => Array(x.size).iterator).collect()
+    assert(parameters.populationSize > numRecsPartition.size, "Too few entities. Need at least one entity per partition")
+    val numEntsPartition = {
+      var numAdditionalEnts = parameters.populationSize - recordsCache.numRecords
+      val temp = numRecsPartition.clone()
+      var i = 0
+      while (numAdditionalEnts != 0) {
+        if (i >= temp.length) i = 0 // reset iterator if we reach the end
+        if (numAdditionalEnts > 0) {
+          temp(i) += 1
+          numAdditionalEnts -= 1
+        } else {
+          // try to subtract from current
+          if (temp(i) > 1) {
+            temp(i) -= 1
+            numAdditionalEnts += 1
+          }
+        }
+        i += 1
+      }
+      temp
+    }
+
     val entRecPairs = recordsCache.transformRecords(records) // map string attribute values to integer ids
-      .zipWithUniqueId()                                     // a unique entity id for each record
+      //.zipWithUniqueId()                                     // a unique entity id for each record
       .mapPartitionsWithIndex((partId, partition) => {       // generate latent variables
         /** Ensure we get different pseudo-random numbers on each partition */
         implicit val rand: RandomGenerator = new MersenneTwister((partId + randomSeed).longValue())
@@ -225,18 +249,43 @@ object State {
         /** Convenience variable */
         val indexedAttributes = bcRecordsCache.value.indexedAttributes
 
-        partition.map { case (Record(id, fileId, values), entId: EntityId) =>
-          val distValues = values.map(DistortedValue(_, distorted = false))
-          /** Use record attribute values, replacing any missing ones by
-            * randomly-generated values */
-          val entValues = (values, indexedAttributes).zipped.map {
+        val numEntities = numEntsPartition(partId) // number of entities in this partition
+        var nextEntId = numEntsPartition.take(partId).sum // ensures unique entity ids across all partitions
+
+        /** Need to convert data from iterator to an array, as we need support for indexing */
+        val records = partition.toArray
+
+        val recordsIt = records.zipWithIndex.iterator.map { case (Record(id, fileId, values), i) =>
+          /** Initialize entity values using record values. Prefer to
+            * use linked record values, but allows for the case where numEntities < numRecords
+            * by taking the modulus */
+          val pickedRecValues = records(i % numEntities).values
+          /** Replace any missing values by randomly-generated values */
+          val entValues = (pickedRecValues, indexedAttributes).zipped.map {
             case (valueId, _) if valueId >= 0 => valueId
             case (_, IndexedAttribute(_, _, _, index)) =>  index.draw()
           }
-          val entity = Entity(entId, entValues)
+          /** Initialize the distortion indicators. Prefer no distortion unless values
+            * disagree */
+          val distValues = (values, entValues).zipped.map {
+            case (recValue, entValue) => DistortedValue(recValue, distorted = recValue != entValue)
+          }
+          val entity = Entity(nextEntId, entValues)
+          nextEntId += 1 // update entity id
           val newRecord = Record[DistortedValue](id, fileId, distValues)
           EntRecPair(entity, Some(newRecord))
         }
+
+        /** Deal with the case numEntities > numRecords, where there are isolated entities */
+        val numIsolates = if (numEntities > records.length) numEntities - records.length else 0
+        val isolatesIt = Iterator.tabulate(numIsolates) { x =>
+          val entValues = indexedAttributes.toArray.map { case IndexedAttribute(_, _, _, index) => index.draw() }
+          val entity = Entity(nextEntId, entValues)
+          nextEntId += 1 // update entity id
+          EntRecPair(entity, None)
+        }
+
+        recordsIt ++ isolatesIt
       }, true)
     entRecPairs.persist(StorageLevel.MEMORY_AND_DISK_SER)
 

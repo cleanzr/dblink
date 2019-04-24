@@ -44,13 +44,14 @@ import scala.util.Try
   * @param matchingAttributes attribute specifications to use for matching
   * @param partitionFunction partition function (determines how entities are partitioned across executors)
   * @param randomSeed random seed
+  * @param populationSize size of the latent population
   * @param expectedMaxClusterSize expected size of the largest record cluster (used as a hint to improve precaching)
   * @param dataFrame data frame containing source records
   */
 case class Project(dataPath: String, outputPath: String, checkpointPath: String,
                    recIdAttribute: String, fileIdAttribute: Option[String],
                    entIdAttribute: Option[String], matchingAttributes: IndexedSeq[Attribute],
-                   partitionFunction: PartitionFunction[ValueId], randomSeed: Long,
+                   partitionFunction: PartitionFunction[ValueId], randomSeed: Long, populationSize: Option[Long],
                    expectedMaxClusterSize: Int, dataFrame: DataFrame) extends Logging {
   require(expectedMaxClusterSize >= 0, "expectedMaxClusterSize must be non-negative")
 
@@ -78,6 +79,7 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
     lines ++= matchingAttributes.zipWithIndex.map { case (attribute, attributeId) =>
       s"  * '${attribute.name}' (id=$attributeId) with ${attribute.similarityFn.mkString} and ${attribute.distortionPrior.mkString}"
     }
+    lines += s"  * Size of latent population is ${populationSize.getOrElse(recordsRDD.count())}"
     lines += ""
 
     lines += "Partition function settings"
@@ -168,13 +170,12 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
 
   def generateInitialState: State = {
     info("Generating new initial state")
-    val records = recordsRDD
     val parameters = Parameters(
-      numEntities = records.count(),
+      populationSize = populationSize.getOrElse(recordsRDD.count()),
       maxClusterSize = expectedMaxClusterSize
     )
     State.deterministic(
-      records = records,
+      records = recordsRDD,
       attributeSpecs = matchingAttributes,
       parameters = parameters,
       partitionFunction = partitionFunction,
@@ -222,6 +223,7 @@ object Project {
       matchingAttributes = matchingAttributes,
       partitionFunction = parsePartitioner(config.getConfig("dblink.partitioner"), matchingAttributes.map(_.name)),
       randomSeed = config.getLong("dblink.randomSeed"),
+      populationSize = Try {Some(config.getLong("dblink.populationSize"))} getOrElse None,
       expectedMaxClusterSize = Try {config.getInt("dblink.expectedMaxClusterSize")} getOrElse 10,
       dataFrame = dataFrame
     )

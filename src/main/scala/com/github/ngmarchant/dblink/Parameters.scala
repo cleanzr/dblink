@@ -19,13 +19,13 @@
 
 package com.github.ngmarchant.dblink
 
-case class Parameters(numEntities: Long,
+case class Parameters(populationSize: Long,
                       maxClusterSize: Int) {
-  require(numEntities > 0, "`numEntities` must be a positive integer.")
+  require(populationSize > 0, "`populationSize` must be a positive integer.")
   require(maxClusterSize > 0, "`maxClusterSize` must be a positive integer.")
 
   def mkString: String = {
-    "numEntities: " + numEntities + "\n" +
+    "populationSize: " + populationSize + "\n" +
     "maxClusterSize: " + maxClusterSize
   }
 }

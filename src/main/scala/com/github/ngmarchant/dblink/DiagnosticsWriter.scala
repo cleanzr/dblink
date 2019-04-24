@@ -62,7 +62,7 @@ class DiagnosticsWriter(path: String, continueChain: Boolean)
     val row: Iterator[String] = Iterator(
         state.iteration.toString,                                                          // iteration
         System.currentTimeMillis().toString,                                               // systemTime-ms
-        (state.bcParameters.value.numEntities - state.summaryVars.numIsolates).toString,   // numObservedEntities
+        (state.bcParameters.value.populationSize - state.summaryVars.numIsolates).toString,   // numObservedEntities
         f"${state.summaryVars.logLikelihood}%.9e") ++                                      // logLikelihood
         (0 until numAttributes).map(aggAttrDistortions.getOrElse(_, 0L).toString) ++       // aggDist-*
         (0 to numAttributes).map(recDistortions.getOrElse(_, 0L).toString)                 // recDistortion-*

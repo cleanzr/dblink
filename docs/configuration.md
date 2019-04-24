@@ -108,6 +108,12 @@ $ spark-submit ... dblink.conf
   </td>
 </tr>
 <tr>
+  <td><code>dblink.populationSize</code></td>
+  <td>
+    Size of the latent population. Defaults to the total number of records.
+  </td>
+</tr>
+<tr>
   <td><code>dblink.expectedMaxClusterSize</code></td>
   <td>
     A hint at the size of the largest clusters expected in the data. 
