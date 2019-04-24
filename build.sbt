@@ -1,10 +1,16 @@
-name in ThisBuild := "dblink"
-description in ThisBuild := "Distributed Bayesian Entity Resolution"
-licenses in ThisBuild := List("GPL-3" -> new URL("https://www.gnu.org/licenses/gpl-3.0.en.html"))
-homepage in ThisBuild := Some(url("https://github.com/ngmarchant/dblink"))
-version in ThisBuild := "0.1"
+val sparkCore = "org.apache.spark" %% "spark-core" % "2.3.1" % "provided" withSources()
+val sparkSql = "org.apache.spark" %% "spark-sql" % "2.3.1" % "provided" withSources()
+val commonsMath3 = "org.apache.commons" % "commons-math3" % "3.6.1"
+val log4j = "org.apache.logging.log4j" % "log4j-scala" % "11.0"
+val scalaTest = "org.scalatest" %% "scalatest" % "3.0.5" % "test"
+val typesafe = "com.typesafe" % "config" % "1.3.2"
+val jvptree = "com.eatthepath" % "jvptree" % "0.2"
 
-developers in ThisBuild := List(
+ThisBuild / name := "dblink"
+ThisBuild / version := "0.1"
+ThisBuild / scalaVersion := "2.11.12"
+
+ThisBuild / developers := List(
   Developer(
     id    = "Your identifier",
     name  = "Neil G. Marchant",
@@ -13,41 +19,37 @@ developers in ThisBuild := List(
   )
 )
 
-scmInfo in ThisBuild := Some(
+ThisBuild / scmInfo := Some(
   ScmInfo(
     url("https://github.com/ngmarchant/dblink"),
     "scm:git@github.com:ngmarchant/dblink.git"
   )
 )
 
+ThisBuild / description := "Distributed Bayesian Entity Resolution"
+ThisBuild / licenses := List("GPL-3" -> new URL("https://www.gnu.org/licenses/gpl-3.0.en.html"))
+ThisBuild / homepage := Some(url("https://github.com/ngmarchant/dblink"))
+
 useGpg := true
 
-scalaVersion := "2.11.12"
-
-val sparkVersion = "2.3.1"
-val breezeVersion = "0.13.2"
-val commonsMathVersion = "3.6.1"
-val scalatestVersion = "3.0.5"
-val typesafeVersion = "1.3.2"
-
 libraryDependencies ++= Seq(
-  "org.apache.commons" % "commons-math3" % commonsMathVersion,
-  "org.apache.spark" %% "spark-core" % sparkVersion % "provided" withSources(),
-  "org.apache.spark" %% "spark-sql" % sparkVersion % "provided" withSources(),
-  "org.apache.logging.log4j" % "log4j-scala" % "11.0",
-  "com.eatthepath" % "jvptree" % "0.2",
-  "org.scalatest" %% "scalatest" % scalatestVersion % "test",
-  "com.typesafe" % "config" % typesafeVersion
+  commonsMath3,
+  sparkCore,
+  sparkSql,
+  log4j,
+  scalaTest,
+  typesafe,
+  jvptree
 )
 
 // Remove all additional repository other than Maven Central from POM
-pomIncludeRepository in ThisBuild := { _ => false }
-publishTo in ThisBuild := {
+ThisBuild / pomIncludeRepository := { _ => false }
+ThisBuild / publishTo := {
   val nexus = "https://oss.sonatype.org/"
   if (isSnapshot.value) Some("snapshots" at nexus + "content/repositories/snapshots")
   else Some("releases" at nexus + "service/local/staging/deploy/maven2")
 }
-publishMavenStyle in ThisBuild := true
+ThisBuild / publishMavenStyle := true
 
 fork in run := true
 javaOptions in run ++= Seq(
