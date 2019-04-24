@@ -4,7 +4,7 @@
 It's based on a Bayesian model called `blink` 
 [(Steorts, 2015)](https://projecteuclid.org/euclid.ba/1441790411), 
 with extensions proposed in
-[(Marchant et al., 2019)](https://TODO).
+[(Marchant, Steorts, Kaplan, Rubinstein, Elazar, 2019)](https://TODO).
 Unlike many ER algorithms, `dblink` approximates the full posterior 
 distribution over clusterings of records (into entities).
 This facilitates propagation of uncertainty to post-ER analysis, 
