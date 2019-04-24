@@ -4,7 +4,7 @@
 It's based on a Bayesian model called `blink` 
 [(Steorts, 2015)](https://projecteuclid.org/euclid.ba/1441790411), 
 with extensions proposed in
-[(Marchant et al., 2019)](https://TODO).
+[(Marchant, Steorts, Kaplan, Rubinstein, Elazar, 2019)](https://TODO).
 Unlike many ER algorithms, `dblink` approximates the full posterior 
 distribution over clusterings of records (into entities).
 This facilitates propagation of uncertainty to post-ER analysis, 
@@ -47,7 +47,10 @@ all other dependencies.
 
 ## Example: RLdata500
 A small data set called `RLdata500` is included in the examples directory as a
-CSV file.
+CSV file. This is a syntethic data set with 500 total records and 10 percent duplicates, where
+ground truth is known so that standard entity resolution metrics can be assessed. [[TODO: Add in some asessments
+to show how these work after running the package for support. Perhaps make these into an R package and build an R interface for this part for the output of dblink. Just a suggestion. There could be a vignette for this and any analysis.]]
+
 It was extracted from the [RecordLinkage](https://cran.r-project.org/web/packages/RecordLinkage/index.html)
 R package and contains 500 synthetically generated records, with some distorted
 values.
@@ -63,6 +66,10 @@ $SPARK_HOME/bin/spark-submit \
   ./target/scala-2.11/dblink-assembly-0.1.jar \
   ./examples/RLdata500.conf
 ```
+
+## Example: RLdata10000
+
+TODO: Add an example of RLdata10000 once we have RLdata500 working. 
 
 The output will be saved at `./examples/RLdata500_results/` (as specified in
 the dblink config file).
