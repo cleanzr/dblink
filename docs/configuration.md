@@ -86,9 +86,7 @@ specified for dblink to run successfully.
   <td><code>dblink.outputPath</code></td>
   <td>
     URI to store any outputs of dblink. This may include the state of the 
-    Markov chain```
-$ spark-submit ... dblink.conf
-```, posterior samples and/or point estimates of the linkage 
+    Markov chain, posterior samples and/or point estimates of the linkage 
     structure and evaluation metrics.
   </td>
 </tr>
