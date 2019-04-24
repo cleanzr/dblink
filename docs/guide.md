@@ -1,10 +1,15 @@
 # Step-by-step guide
 
 ## 1. Install Java
-You will need to install Java on your system. Instructions are available 
+You will need to install Java 8+ on your system. To check whether it is 
+installed on macOS or Linux, run the command
+```bash
+$ java -version
+```
+You should see a version number greater than 8 (or equivalently, greater 
+than 1.8).
+Installation instructions for Windows, macOS and Linux are available 
 [here](https://java.com/en/download/help/download_options.xml).
-
-TODO: Check whether java is installed (Linux and Mac, "java -version"). 
 
 ## 2. Install Apache Spark
 You will need to ensure the correct version of Spark is installed on your 
@@ -35,24 +40,19 @@ switch to another version in the future.
 $ sudo mv spark-2.3.1-bin-hadoop2.7 /opt
 $ sudo ln -s /opt/spark-2.3.1-bin-hadoop2.7/ /opt/spark
 ```
-Define the `SPARK_HOME` variable and add the Spark binaries to your PATH. 
-This can be done for your user account by adding the following lines to 
-the end of your `.profile` (bash profile) file:
-
-NOTE: Look up terminology for bash profile as this might be confusing. 
-
-```
-export SPARK_HOME=/opt/spark
-export PATH=$PATH:$SPARK_HOME/bin
+Define the `SPARK_HOME` variable and add the Spark binaries to your path. 
+This can be done for your user account by adding two lines to 
+the end of your `~/.bash_profile` or `~/.profile` file.
+```bash
+$ echo 'export SPARK_HOME=/opt/spark' >> ~/.bash_profile
+$ echo 'export PATH=$PATH:$SPARK_HOME/bin' >> ~/.bash_profile
 ```
 
-After appending these two lines, run the following command from the console in order to update the 
-profile (NOTE: say this properly). 
-
+After appending these two lines, run the following command to update your 
+path for the current session. 
+```bash
+$ source ~/.bash_profile 
 ```
-$ sh .bash_profile 
-```
-
 
 ## 3. Obtain the dblink JAR file
 In this step you'll obtain the dblink fat JAR, which will have file name 
@@ -65,19 +65,17 @@ other versions of Spark.
 
 ### Building the fat JAR
 The build tool used for dblink is called sbt. You will need to install 
-sbt (and Scala) on your system. Instructions are available for Windows, 
-Mac and Linux in the sbt 
+sbt on your system. Instructions are available for Windows, macOS and Linux 
+in the sbt 
 [documentation](https://www.scala-sbt.org/1.x/docs/Setup.html).
 
-Check to make sure that sbt installed correctly (Linus and MacOS).
-
+On Linux, you can verify that sbt is installed correctly by running.
+```bash
+$ sbt about
 ```
-$ sbt
-```
 
-Once you have successfully installed sbt, leave the sbt prompt by entering control C. 
-
-Once you've installed sbt, get the dblink source code from GitHub:
+Once you've successfully installed sbt, get the dblink source code from 
+GitHub:
 ```bash
 $ git clone git@github.com:ngmarchant/dblink.git
 ```
