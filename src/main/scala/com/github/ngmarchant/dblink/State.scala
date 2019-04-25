@@ -245,12 +245,12 @@ object State {
       .mapPartitionsWithIndex((partId, partition) => {       // generate latent variables
         /** Ensure we get different pseudo-random numbers on each partition */
         implicit val rand: RandomGenerator = new MersenneTwister((partId + randomSeed).longValue())
-
+        println(s"partitionId=${partId}")
         /** Convenience variable */
         val indexedAttributes = bcRecordsCache.value.indexedAttributes
 
         val numEntities = numEntsPartition(partId) // number of entities in this partition
-        var nextEntId = numEntsPartition.take(partId).sum // ensures unique entity ids across all partitions
+        val firstEntId = numEntsPartition.take(partId).sum // ensures unique entity ids across all partitions
 
         /** Need to convert data from iterator to an array, as we need support for indexing */
         val records = partition.toArray
@@ -259,7 +259,9 @@ object State {
           /** Initialize entity values using record values. Prefer to
             * use linked record values, but allows for the case where numEntities < numRecords
             * by taking the modulus */
-          val pickedRecValues = records(i % numEntities).values
+          val linkRecId = i % numEntities
+          val entId = firstEntId + linkRecId
+          val pickedRecValues = records(linkRecId).values
           /** Replace any missing values by randomly-generated values */
           val entValues = (pickedRecValues, indexedAttributes).zipped.map {
             case (valueId, _) if valueId >= 0 => valueId
@@ -270,18 +272,17 @@ object State {
           val distValues = (values, entValues).zipped.map {
             case (recValue, entValue) => DistortedValue(recValue, distorted = recValue != entValue)
           }
-          val entity = Entity(nextEntId, entValues)
-          nextEntId += 1 // update entity id
+          val entity = Entity(entId, entValues)
           val newRecord = Record[DistortedValue](id, fileId, distValues)
           EntRecPair(entity, Some(newRecord))
         }
 
         /** Deal with the case numEntities > numRecords, where there are isolated entities */
         val numIsolates = if (numEntities > records.length) numEntities - records.length else 0
-        val isolatesIt = Iterator.tabulate(numIsolates) { x =>
+        val isolatesIt = Iterator.tabulate(numIsolates) { i =>
+          val entId = firstEntId + records.size + i
           val entValues = indexedAttributes.toArray.map { case IndexedAttribute(_, _, _, index) => index.draw() }
-          val entity = Entity(nextEntId, entValues)
-          nextEntId += 1 // update entity id
+          val entity = Entity(entId, entValues)
           EntRecPair(entity, None)
         }
 

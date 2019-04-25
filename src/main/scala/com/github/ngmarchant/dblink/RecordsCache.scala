@@ -122,7 +122,7 @@ object RecordsCache extends Logging {
     val firstRecord = records.take(1).head
     require(firstRecord.values.length == indexedAttributes.length, "attribute specifications do not match the records")
 
-    records.mapPartitions { partition =>
+    records.mapPartitions( partition => {
       partition.map { record =>
         val mappedValues = record.values.zipWithIndex.map { case (stringValue, attrId) =>
           if (stringValue != null) indexedAttributes(attrId).index.valueIdxOf(stringValue)
@@ -130,6 +130,6 @@ object RecordsCache extends Logging {
         }
         Record[ValueId](record.id, record.fileId, mappedValues)
       }
-    }
+    },true)
   }
 }
