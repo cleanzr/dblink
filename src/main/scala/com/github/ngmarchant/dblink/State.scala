@@ -241,11 +241,10 @@ object State {
     }
 
     val entRecPairs = recordsCache.transformRecords(records) // map string attribute values to integer ids
-      //.zipWithUniqueId()                                     // a unique entity id for each record
       .mapPartitionsWithIndex((partId, partition) => {       // generate latent variables
         /** Ensure we get different pseudo-random numbers on each partition */
         implicit val rand: RandomGenerator = new MersenneTwister((partId + randomSeed).longValue())
-        println(s"partitionId=${partId}")
+
         /** Convenience variable */
         val indexedAttributes = bcRecordsCache.value.indexedAttributes
 
