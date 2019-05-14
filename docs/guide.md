@@ -34,7 +34,7 @@ Extract the archive.
 ```bash
 $ tar -xvf spark-2.3.1-bin-hadoop2.7.tgz
 ```
-Move the Spark folder to /opt and create a symbolic link so that you can easily  
+Move the Spark folder to /opt and create a symbolic link so that you can easily 
 switch to another version in the future.
 ```bash
 $ sudo mv spark-2.3.1-bin-hadoop2.7 /opt
@@ -77,7 +77,7 @@ $ sbt about
 Once you've successfully installed sbt, get the dblink source code from 
 GitHub:
 ```bash
-$ git clone git@github.com:ngmarchant/dblink.git
+$ git clone https://github.com/ngmarchant/dblink.git
 ```
 Then change into the dblink directory and build the package
 ```bash
