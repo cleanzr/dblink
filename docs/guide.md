@@ -70,9 +70,11 @@ in the sbt
 [documentation](https://www.scala-sbt.org/1.x/docs/Setup.html).
 
 On Linux, you can verify that sbt is installed correctly by running.
+Comment to NM: I may have an issue regarding sbt, as when I run this bash command below, I get the following 
 ```bash
 $ sbt about
 ```
+**Comment to NM: If the user has already cloned this before, they get a message regarding the fact that it already exists. Should we give some more information (such as to pull if they get the following message: fatal: destination path 'dblink' already exists and is not an empty directory.
 
 Once you've successfully installed sbt, get the dblink source code from 
 GitHub:
@@ -91,6 +93,9 @@ build the fat JAR. It is arguably more user-friendly as it has a GUI and
 users can avoid installing sbt._
 
 ## 4. Run dblink
+**Comment to NM: I think we should tell the user to cd into examples to be more clear. 
+**Comment: When I run the bash command below, I get the following: SPARK_HOME/bin/spark-submit: No match.
+
 Everything should now be in place to run dblink. As a test, you can try running 
 the example provided with the source code for the RLdata500 data set.
 From within the `examples` directory, run the following command:
