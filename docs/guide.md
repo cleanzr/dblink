@@ -108,18 +108,15 @@ users can avoid installing sbt._
 ## 4. Run dblink
 Everything should now be in place to run dblink. As a test, you can try running 
 the example provided with the source code for the RLdata500 data set.
-Change into the `examples` directory
-```bash
-$ cd examples
-```
-and run the following command:
+Within the dblink directory run the following command:
+
 ```bash
 $ $SPARK_HOME/bin/spark-submit \
-    --master local[1] \
-    --conf "spark.driver.extraJavaOptions=-Dlog4j.configuration=log4j.properties" \
-    --conf "spark.driver.extraClassPath=./target/scala-2.11/dblink-assembly-0.1.jar" \
-    ./target/scala-2.11/dblink-assembly-0.1.jar \
-    RLdata500.conf
+     --master local[1] \
+     --conf "spark.driver.extraJavaOptions=-Dlog4j.configuration=log4j.properties" \
+     --conf "spark.driver.extraClassPath=./target/scala-2.11/dblink-assembly-0.1.jar" \
+     ./target/scala-2.11/dblink-assembly-0.1.jar \
+     ./examples/RLdata500.conf
 ```
 This will run Spark locally in pseudocluster mode with 1 core. You can increase 
 the number of cores available by changing `local[1]` to `local[n]` where `n` 
