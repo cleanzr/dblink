@@ -1,4 +1,4 @@
-# Step-by-step guide
+# Step-by-step guide (for the first installation)
 
 ## 1. Install Java
 You will need to install Java 8+ on your system. To check whether it is 
@@ -124,3 +124,14 @@ is the number of cores or `local[*]` to use all available cores.
 To run dblink on other data sets you will need to edit the config file (called 
 `RLdata500.conf` above).
 Instructions for doing this are provided [here](configuration.md).
+
+# Step-by-step guide (assuming you have already installed dblink)
+
+If you have already completed an install previously, and are returning for guidance on making a run with dblink, please make sure the follow the following steps:
+
+## 1. Rebuild the dblink fat JAR (see step 3 above)
+## 2. Make a fresh pull of dblink
+```
+git pull origin master
+```
+### 3. Run dblink (See step 4 above)
