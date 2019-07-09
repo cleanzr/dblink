@@ -70,7 +70,6 @@ in the sbt
 [documentation](https://www.scala-sbt.org/1.x/docs/Setup.html).
 
 On Linux, you can verify that sbt is installed correctly by running.
-Comment to NM: I may have an issue regarding sbt, as when I run this bash command below, I get the following 
 ```bash
 $ sbt about
 ```
