@@ -54,6 +54,21 @@ path for the current session.
 $ source ~/.bash_profile 
 ```
 
+_Note: If for some reason, you are getting an error such as the one below
+```[rcs46@tyrion ~]$ source .bash_profile
+if: Expression Syntax.
+then: Command not found.
+```
+this means that you're terminal is not running bash. 
+
+You can check this in the following way and ensure that you are running bash using the following commands:
+
+```
+$SHELL
+$BASH_VERSION
+bash
+```
+
 ## 3. Obtain the dblink JAR file
 In this step you'll obtain the dblink fat JAR, which will have file name 
 `dblink-assembly-0.1.jar`.
