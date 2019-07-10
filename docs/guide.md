@@ -1,4 +1,4 @@
-# Step-by-step guide (for the first installation)
+# Step-by-step guide
 
 ## 1. Install Java
 You will need to install Java 8+ on your system. To check whether it is 
