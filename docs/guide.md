@@ -51,6 +51,8 @@ $ echo 'export SPARK_HOME=/opt/spark' >> ~/.profile
 $ echo 'export PATH=$PATH:$SPARK_HOME/bin' >> ~/.profile
 ```
 
+***Comment from RCS: Don't we still need to source ~/.profile so it updates?
+
 * If using Bash on Debian, Fedora or RHEL derivatives, environment 
 variables are typically defined in `~/.bash_profile` rather than 
 `~/.profile`
