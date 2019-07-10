@@ -119,7 +119,7 @@ To run dblink on other data sets you will need to edit the config file (called
 `RLdata500.conf` above).
 Instructions for doing this are provided [here](configuration.md).
 
-5. Results of dblink
+## 5. Results of dblink
 
 The results from the run of dblink can be found by changing into the `examples/RLdata500_results/` directory. 
 
