@@ -40,38 +40,30 @@ switch to another version in the future.
 $ sudo mv spark-2.3.1-bin-hadoop2.7 /opt
 $ sudo ln -s /opt/spark-2.3.1-bin-hadoop2.7/ /opt/spark
 ```
-Define the `SPARK_HOME` variable and add the Spark binaries to your path. 
-This can be done for your user account by adding two lines to 
-the end of your `~/.bash_profile` or `~/.profile` file.
+
+Define the `SPARK_HOME` environment variable and add the Spark binaries to 
+your `PATH`. 
+The way that this is done depends on your operating system and/or shell.
+Assuming enviornment variables are defined in `~/.profile`, you can 
+run the following commands:
 ```bash
-$ echo 'export SPARK_HOME=/opt/spark' >> ~/.bash_profile
-$ echo 'export PATH=$PATH:$SPARK_HOME/bin' >> ~/.bash_profile
+$ echo 'export SPARK_HOME=/opt/spark' >> ~/.profile
+$ echo 'export PATH=$PATH:$SPARK_HOME/bin' >> ~/.profile
 ```
 
-After appending these two lines, run the following command to update your 
-path for the current session. 
-```bash
-$ source ~/.bash_profile 
-```
-
-_Note: If for some reason, you are getting an error such as the one below
-```[rcs46@tyrion ~]$ source .bash_profile
-if: Expression Syntax.
-then: Command not found.
-```
-this means that you're terminal is not running bash. 
-
-You can check this in the following way and ensure that you are running bash using the following commands:
-
-```
-$SHELL
-$BASH_VERSION
-bash
-```
+* If using Bash on Debian, Fedora or RHEL derivatives, environment 
+variables are typically defined in `~/.bash_profile` rather than 
+`~/.profile`
+* If using ZSH, environment variables are typically defined in 
+`~/.zprofile`
+* You can check which shell you're using by running `echo $SHELL`
 
 ## 3. Obtain the dblink JAR file
 In this step you'll obtain the dblink fat JAR, which will have file name 
 `dblink-assembly-0.1.jar`.
+It contains all of the class files and resources, packed together with 
+dependencies.
+
 There are two options:
 * Download a prebuilt JAR from [here](http://). 
 This has been built against Spark 2.3.1 and is not guaranteed to work with 
@@ -125,13 +117,14 @@ To run dblink on other data sets you will need to edit the config file (called
 `RLdata500.conf` above).
 Instructions for doing this are provided [here](configuration.md).
 
-# Step-by-step guide (assuming you have already installed dblink)
+## Updating dblink
+If you've already installed dblink and would like to upgrade to the latest 
+development version, you should only need to repeat step 3 before continuing 
+on to step 4.
 
-If you have already completed an install previously, and are returning for guidance on making a run with dblink, please make sure the follow the following steps:
-
-## 1. Rebuild the dblink fat JAR (see step 3 above)
-## 2. Make a fresh pull of dblink
+You can either remove the `dblink` directory and clone the repository again. 
+Or you can pull the latest version by running
+```bash
+$ git pull origin master
 ```
-git pull origin master
-```
-### 3. Run dblink (See step 4 above)
+before running the `sbt assembly` command to build the fat JAR.
