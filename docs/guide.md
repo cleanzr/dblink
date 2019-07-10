@@ -119,6 +119,22 @@ To run dblink on other data sets you will need to edit the config file (called
 `RLdata500.conf` above).
 Instructions for doing this are provided [here](configuration.md).
 
+5. Results of dblink
+
+The results from the run of dblink can be found by changing into the `examples/RLdata500_results/` directory. 
+
+Here's a brief description of the files:
+
+1. `run.txt`: contains details about the job (MCMC run). This includes the data files, the attributes used, parameter settings etc.
+2. `partitions-state.parquet` and `driver-state`: stores the final state of the Markov chain, so that MCMC can be resumed (e.g. you can run the chain for longer without starting from scratch).
+3. `diagnostics.csv` contains summary statistics along the chain which can be used to assess convergence/mixing.
+4. `linkage-chain.parquet` contains posterior samples of the linkage structure in Parquet format.
+
+Optional files:
+4. `evaluation-results.txt`: contains output from an "evaluate" step (e.g. precision, recall, other measures). Requires ground truth entity identifiers in the data files.
+5. `cluster-size-distribution.csv` contains the cluster size distribution along the chain (rows are iterations, columns contain counts for each cluster/entity size.  Only appears if requested in a "summarize" step.
+6.`partition-sizes.csv` contains the partition sizes along the chain (rows are iterations, columns are counts of the number of entities residing in each partition). Only appears if requested in a  "summarize" step.
+
 ## Updating dblink
 If you've already installed dblink and would like to upgrade to the latest 
 development version, you should only need to repeat step 3 before continuing 
@@ -130,3 +146,4 @@ Or you can pull the latest version by running
 $ git pull origin master
 ```
 before running the `sbt assembly` command to build the fat JAR.
+
