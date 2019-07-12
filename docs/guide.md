@@ -106,7 +106,7 @@ Within the dblink directory run the following command:
 
 ```bash
 $ $SPARK_HOME/bin/spark-submit \
-     --master local[1] \
+     --master "local[1]" \
      --conf "spark.driver.extraJavaOptions=-Dlog4j.configuration=log4j.properties" \
      --conf "spark.driver.extraClassPath=./target/scala-2.11/dblink-assembly-0.1.jar" \
      ./target/scala-2.11/dblink-assembly-0.1.jar \
@@ -131,9 +131,11 @@ Here's a brief description of the files:
 4. `linkage-chain.parquet` contains posterior samples of the linkage structure in Parquet format.
 
 Optional files:
-4. `evaluation-results.txt`: contains output from an "evaluate" step (e.g. precision, recall, other measures). Requires ground truth entity identifiers in the data files.
-5. `cluster-size-distribution.csv` contains the cluster size distribution along the chain (rows are iterations, columns contain counts for each cluster/entity size.  Only appears if requested in a "summarize" step.
-6.`partition-sizes.csv` contains the partition sizes along the chain (rows are iterations, columns are counts of the number of entities residing in each partition). Only appears if requested in a  "summarize" step.
+
+1. `evaluation-results.txt`: contains output from an "evaluate" step (e.g. precision, recall, other measures). Requires ground truth entity identifiers in the data files.
+2. `cluster-size-distribution.csv` contains the cluster size distribution along the chain (rows are iterations, columns contain counts for each cluster/entity size.  Only appears if requested in a "summarize" step.
+3.`partition-sizes.csv` contains the partition sizes along the chain (rows are iterations, columns are counts of the number of entities residing in each partition). Only appears if requested in a  "summarize" step.
+
 
 ## Updating dblink
 If you've already installed dblink and would like to upgrade to the latest 
