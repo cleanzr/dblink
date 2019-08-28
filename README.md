@@ -45,34 +45,35 @@ relative to the project directory.
 Note that the JAR file does not bundle Spark or Hadoop, but it does include
 all other dependencies.
 
-## Example: RLdata500
-A small data set called `RLdata500` is included in the examples directory as a
-CSV file. This is a syntethic data set with 500 total records and 10 percent duplicates, where
-ground truth is known so that standard entity resolution metrics can be assessed. [[TODO: Add in some asessments
-to show how these work after running the package for support. Perhaps make these into an R package and build an R interface for this part for the output of dblink. Just a suggestion. There could be a vignette for this and any analysis.]]
-
-It was extracted from the [RecordLinkage](https://cran.r-project.org/web/packages/RecordLinkage/index.html)
-R package and contains 500 synthetically generated records, with some distorted
-values.
-A dblink config file `RLdata500.conf` is included in the examples directory for
-this data set.
-To run it, build the fat JAR according to the instructions above, then use
-`spark-submit` as follows:
+## Example: RLdata500 and RLdata10000
+Two synthetic data sets RLdata500 and RLdata10000 are included in the examples 
+directory as CSV files.
+These data sets were extracted from the [RecordLinkage](https://cran.r-project.org/web/packages/RecordLinkage/index.html)
+R package and have been used as benchmark data sets in the entity resolution 
+literature.
+Both contain 10 percent duplicates and are non-trivial to link due to added 
+distortion.
+Standard entity resolution metrics can be assessed as ground truth is 
+included.
+Config files are included for these data sets in the examples directory: 
+see `RLdata500.conf` and `RLdata10000.conf`.
+To run these examples locally (in Spark pseudocluster mode), 
+ensure you've built or obtained the JAR according to the instructions 
+above, then change into the source code directory and run the following 
+command:
 ```bash
 $SPARK_HOME/bin/spark-submit \
-  --master local[1] \
+  --master "local[*]" \
   --conf "spark.driver.extraJavaOptions=-Dlog4j.configuration=log4j.properties" \
   --conf "spark.driver.extraClassPath=./target/scala-2.11/dblink-assembly-0.1.jar" \
   ./target/scala-2.11/dblink-assembly-0.1.jar \
   ./examples/RLdata500.conf
 ```
-
-## Example: RLdata10000
-
-TODO: Add an example of RLdata10000 once we have RLdata500 working. 
-
-The output will be saved at `./examples/RLdata500_results/` (as specified in
-the dblink config file).
+To run the RLdata10000 example instead, replace `RLdata500.conf` above with 
+`RLdata10000.conf`.
+Note that the config file specifies that the output will be saved in
+the `./examples/RLdata500_results/` (or `./examples/RLdata10000_results`) 
+directory.
 
 ## License
 GPL-3
