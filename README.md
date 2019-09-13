@@ -1,4 +1,4 @@
-# dblink
+# dblink: Distributed End-to-End Bayesian Entity Resolution
 `dblink` is a Spark package for performing unsupervised entity resolution 
 (ER) on structured data.
 It's based on a Bayesian model called `blink` 
@@ -74,6 +74,11 @@ To run the RLdata10000 example instead, replace `RLdata500.conf` above with
 Note that the config file specifies that the output will be saved in
 the `./examples/RLdata500_results/` (or `./examples/RLdata10000_results`) 
 directory.
+
+## Contact
+If you encounter problems, please [open an issue](https://github.com/ngmarchant/dblink/issues) 
+on GitHub. 
+You can also contact the main developer by email `<GitHub username> <at> gmail.com`
 
 ## License
 GPL-3
