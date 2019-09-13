@@ -1,6 +1,6 @@
 dblink: Empirical Bayes Entity Resolution for Spark
 
-Copyright (C) 2018  Neil Marchant
+Copyright (C) 2018-2019  dblink contributors
 Copyright (C) 2018  Australian Bureau of Statistics
 
 This program is free software: you can redistribute it and/or modify
