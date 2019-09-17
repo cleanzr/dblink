@@ -84,7 +84,7 @@ It contains all of the class files and resources for dblink, packed together
 with any dependencies.
 
 There are two options:
-* (Recommended) Download a prebuilt JAR from [here](http://). 
+* (Recommended) Download a prebuilt JAR from [here](https://github.com/ngmarchant/dblink/releases). 
 This has been built against Spark 2.3.1 and is not guaranteed to work with 
 other versions of Spark.
 * Build the fat JAR file from source as explained in the section below.
