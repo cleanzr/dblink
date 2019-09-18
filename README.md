@@ -85,4 +85,5 @@ GPL-3
 
 ## Citing the package
 Marchant, N. G., Steorts R. C., Kaplan, A., Rubinstein, B. I. P., Elazar, D. N. 
-(2019). dblink: Distributed End-to-End Bayesian Entity Resolution. _TODO_, ?-?.
+(2019). dblink: Distributed End-to-End Bayesian Entity Resolution. _eprint 
+arXiv:1909.06039_ URL: [https://arxiv.org/abs/1909.06039](https://arxiv.org/abs/1909.06039).
