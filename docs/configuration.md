@@ -85,9 +85,10 @@ specified for dblink to run successfully.
 <tr>
   <td><code>dblink.outputPath</code></td>
   <td>
-    URI to store any outputs of dblink. This may include the state of the 
-    Markov chain, posterior samples and/or point estimates of the linkage 
-    structure and evaluation metrics.
+    URI where outputs of dblink will be stored. Outputs may include the 
+    state of the Markov chain, posterior samples and/or point estimates of 
+    the linkage structure and evaluation metrics. The URI should typically 
+    point to a location on HDFS storage.
   </td>
 </tr>
 <tr>
@@ -95,7 +96,8 @@ specified for dblink to run successfully.
   <td>
     URI where checkpoints will be stored. Checkpoints are made periodically 
     to prevent the lineage of the RDD from becoming too long. These 
-    are removed automatically when dblink finishes running.
+    are removed automatically when dblink finishes running. The URI should 
+    typically point to a location on HDFS storage.
   </td>
 </tr>
 <tr>
