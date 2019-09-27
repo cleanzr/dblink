@@ -123,7 +123,7 @@ interface, which supports all types of Spark deployments.
 
 As a test, let's try running the RLdata500 example provided with the source 
 code on your local machine.
-From within the `examples` directory, run the following command:
+From within the `dblink` directory, run the following command:
 ```bash
 $SPARK_HOME/bin/spark-submit \
   --master "local[1]" \
