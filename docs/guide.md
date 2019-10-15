@@ -15,7 +15,10 @@ You should see a version number of the form 8.x (or equivalently 1.8.x).
 Installation instructions for Oracle JDK on Windows, macOS and Linux are 
 available [here](https://java.com/en/download/help/download_options.xml).
 
-_Note: OpenJDK is an open source alternative to the Oracle JDK._
+_Note: As of April 2019, the licensing terms of the Oracle JDK have changed. 
+We recommend using an open source alternative such as the OpenJDK. Packages 
+are available in many Linux distributions. Instructions for macOS are 
+available [here](macos-java8.md)._
 
 ## 1. Get access to a Spark cluster
 Since dblink is implemented as a Spark application, you'll need access to a 
@@ -92,8 +95,9 @@ other versions of Spark.
 ### 2.1. Building the fat JAR
 The build tool used for dblink is called sbt. You'll need to install 
 sbt on your system. Instructions are available for Windows, macOS and Linux 
-in the sbt 
-[documentation](https://www.scala-sbt.org/1.x/docs/Setup.html).
+in the sbt. We give alternative installtion in the second set of instructions
+for those using bash on MacOS. 
+[documentation](https://www.scala-sbt.org/1.x/docs/Setup.html)
 
 On macOS or Linux, you can verify that sbt is installed correctly by running.
 ```bash
