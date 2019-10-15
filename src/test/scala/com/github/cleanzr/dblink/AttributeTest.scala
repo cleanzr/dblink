@@ -1,4 +1,4 @@
-// Copyright (C) 2018  Australian Bureau of Statistics
+// Copyright (C) 2018  Neil Marchant
 //
 // Author: Neil Marchant
 //
@@ -17,13 +17,21 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import com.github.cleanzr.dblink.Run
-import org.apache.spark.{SparkConf, SparkContext}
+package com.github.cleanzr.dblink
 
-object Launch {
-  def main(args: Array[String]) {
-    val conf = new SparkConf().setMaster("local[2]").setAppName("dblink")
-    val sc = SparkContext.getOrCreate(conf)
-    Run.main(args)
+import org.scalatest.FlatSpec
+import com.github.cleanzr.dblink.SimilarityFn._
+
+class AttributeTest extends FlatSpec {
+  behavior of "An attribute with a constant similarity function"
+
+  it should "be constant" in {
+    assert(Attribute("name", ConstantSimilarityFn, BetaShapeParameters(1.0, 1.0)).isConstant === true)
+  }
+
+  behavior of "An attribute with a non-constant similarity function"
+
+  it should "not be constant" in {
+    assert(Attribute("name", LevenshteinSimilarityFn(), BetaShapeParameters(1.0, 1.0)).isConstant === false)
   }
 }

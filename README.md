@@ -22,7 +22,7 @@ _Note: This won't work yet. Waiting for project to be accepted._
 Maven:
 ```xml
 <dependency>
-  <groupId>com.github.ngmarchant</groupId>
+  <groupId>com.github.cleanzr</groupId>
   <artifactId>dblink</artifactId>
   <version>0.1.0</version>
 </dependency>
@@ -30,7 +30,7 @@ Maven:
 
 sbt:
 ```scala
-libraryDependencies += "com.github.ngmarchant" % "dblink" % 0.1.0
+libraryDependencies += "com.github.cleanzr" % "dblink" % 0.1.0
 ```
 
 ## How to: Build a fat JAR

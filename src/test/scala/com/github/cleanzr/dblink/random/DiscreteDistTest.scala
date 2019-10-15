@@ -1,4 +1,4 @@
-// Copyright (C) 2018  Australian Bureau of Statistics
+// Copyright (C) 2018  Neil Marchant
 //
 // Author: Neil Marchant
 //
@@ -17,13 +17,20 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import com.github.cleanzr.dblink.Run
-import org.apache.spark.{SparkConf, SparkContext}
+package com.github.cleanzr.dblink.random
 
-object Launch {
-  def main(args: Array[String]) {
-    val conf = new SparkConf().setMaster("local[2]").setAppName("dblink")
-    val sc = SparkContext.getOrCreate(conf)
-    Run.main(args)
-  }
+import org.apache.commons.math3.random.{MersenneTwister, RandomGenerator}
+import org.scalatest.FlatSpec
+
+class DiscreteDistTest extends FlatSpec with DiscreteDistBehavior {
+
+  implicit val rand: RandomGenerator = new MersenneTwister()
+
+  def valuesWeights = Map("A" -> 100.0, "B" -> 200.0, "C" -> 700.0)
+  val indexDist = DiscreteDist(valuesWeights.values)
+  val dist = DiscreteDist(valuesWeights)
+
+  "A discrete distribution (without values given)" should behave like genericDiscreteDist(indexDist, 5)
+
+  "A discrete distribution (with values given)" should behave like genericDiscreteDist(dist, "D")
 }

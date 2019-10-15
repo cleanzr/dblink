@@ -17,13 +17,22 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import com.github.cleanzr.dblink.Run
-import org.apache.spark.{SparkConf, SparkContext}
+package com.github.cleanzr.dblink.analysis
 
-object Launch {
-  def main(args: Array[String]) {
-    val conf = new SparkConf().setMaster("local[2]").setAppName("dblink")
-    val sc = SparkContext.getOrCreate(conf)
-    Run.main(args)
+object BinaryClassificationMetrics {
+  def precision(binaryConfusionMatrix: BinaryConfusionMatrix): Double = {
+    binaryConfusionMatrix.numTruePositives.toDouble / binaryConfusionMatrix.numPredictedPositives
+  }
+
+  def recall(binaryConfusionMatrix: BinaryConfusionMatrix): Double = {
+    binaryConfusionMatrix.numTruePositives.toDouble / binaryConfusionMatrix.numPositives
+  }
+
+  def fMeasure(binaryConfusionMatrix: BinaryConfusionMatrix,
+               beta: Double = 1.0): Double = {
+    val betaSq = beta * beta
+    val pr = precision(binaryConfusionMatrix)
+    val re = recall(binaryConfusionMatrix)
+    (1 + betaSq) * pr * re / (betaSq * pr + re)
   }
 }

@@ -17,13 +17,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import com.github.cleanzr.dblink.Run
-import org.apache.spark.{SparkConf, SparkContext}
+package com.github.cleanzr.dblink
 
-object Launch {
-  def main(args: Array[String]) {
-    val conf = new SparkConf().setMaster("local[2]").setAppName("dblink")
-    val sc = SparkContext.getOrCreate(conf)
-    Run.main(args)
+case class Parameters(populationSize: Long,
+                      maxClusterSize: Int) {
+  require(populationSize > 0, "`populationSize` must be a positive integer.")
+  require(maxClusterSize > 0, "`maxClusterSize` must be a positive integer.")
+
+  def mkString: String = {
+    "populationSize: " + populationSize + "\n" +
+    "maxClusterSize: " + maxClusterSize
   }
 }

@@ -17,13 +17,27 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import com.github.cleanzr.dblink.Run
-import org.apache.spark.{SparkConf, SparkContext}
+package com.github.cleanzr.dblink.partitioning
 
-object Launch {
-  def main(args: Array[String]) {
-    val conf = new SparkConf().setMaster("local[2]").setAppName("dblink")
-    val sc = SparkContext.getOrCreate(conf)
-    Run.main(args)
-  }
+import org.apache.spark.rdd.RDD
+
+abstract class PartitionFunction[T] extends Serializable {
+
+  /** Number of partitions */
+  def numPartitions: Int
+
+  /** Fit partition function based on a sample of records
+    *
+    * @param records RDD of records. Assumes no values are missing.
+    */
+  def fit(records: RDD[Array[T]]): Unit
+
+  /** Get assigned partition for a set of attribute values
+    *
+    * @param attributeValues array of (entity) attribute values. Assumes no values are missing.
+    * @return identifier of assigned parittion: an integer in {0, ..., numPartitions - 1}.
+    */
+  def getPartitionId(attributeValues: Array[T]): Int
+
+  def mkString: String
 }

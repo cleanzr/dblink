@@ -17,13 +17,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import com.github.cleanzr.dblink.Run
-import org.apache.spark.{SparkConf, SparkContext}
+package com.github.cleanzr.dblink.util
 
-object Launch {
-  def main(args: Array[String]) {
-    val conf = new SparkConf().setMaster("local[2]").setAppName("dblink")
-    val sc = SparkContext.getOrCreate(conf)
-    Run.main(args)
+import org.apache.spark.Partitioner
+
+class HardPartitioner(override val numPartitions: Int) extends Partitioner {
+  override def getPartition(key: Any): Int = {
+    val k = key.asInstanceOf[Int]
+    k % numPartitions
   }
 }

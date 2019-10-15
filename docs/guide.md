@@ -149,24 +149,28 @@ above, the output is written to `./examples/RLdata500_results/`.
 
 Below we provide a brief description of the files:
 
-1. `run.txt`: contains details about the job (MCMC run). This includes the 
+* `run.txt`: contains details about the job (MCMC run). This includes the 
 data files, the attributes used, parameter settings etc.
-2. `partitions-state.parquet` and `driver-state`: stores the final state of 
+* `partitions-state.parquet` and `driver-state`: stores the final state of 
 the Markov chain, so that MCMC can be resumed (e.g. you can run the Markov 
 chain for longer without starting from scratch).
-3. `diagnostics.csv` contains summary statistics along the chain which can be 
+* `diagnostics.csv` contains summary statistics along the chain which can be 
 used to assess convergence/mixing.
-4. `linkage-chain.parquet` contains posterior samples of the linkage structure 
+* `linkage-chain.parquet` contains posterior samples of the linkage structure 
 in Parquet format.
 
 Optional files:
 
-1. `evaluation-results.txt`: contains output from an "evaluate" step (e.g. 
+* `evaluation-results.txt`: contains output from an "evaluate" step (e.g. 
 precision, recall, other measures). Requires ground truth entity identifiers 
 in the data files.
-2. `cluster-size-distribution.csv` contains the cluster size distribution 
+* `cluster-size-distribution.csv` contains the cluster size distribution 
 along the chain (rows are iterations, columns contain counts for each 
 cluster/entity size.  Only appears if requested in a "summarize" step.
-3. `partition-sizes.csv` contains the partition sizes along the chain (rows 
+* `partition-sizes.csv` contains the partition sizes along the chain (rows 
 are iterations, columns are counts of the number of entities residing in each 
 partition). Only appears if requested in a "summarize" step.
+* `shared-most-probable-clusters.csv` is a point estimate of the linkage 
+structure computed from the posterior samples. Each line in the file contains 
+a comma-separated list of record identifiers which are assigned to the same 
+cluster/entity.  

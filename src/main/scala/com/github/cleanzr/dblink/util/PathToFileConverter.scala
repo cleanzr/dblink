@@ -1,4 +1,4 @@
-// Copyright (C) 2018  Australian Bureau of Statistics
+// Copyright (C) 2018  Neil Marchant
 //
 // Author: Neil Marchant
 //
@@ -17,13 +17,20 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import com.github.cleanzr.dblink.Run
-import org.apache.spark.{SparkConf, SparkContext}
+package com.github.cleanzr.dblink.util
 
-object Launch {
-  def main(args: Array[String]) {
-    val conf = new SparkConf().setMaster("local[2]").setAppName("dblink")
-    val sc = SparkContext.getOrCreate(conf)
-    Run.main(args)
+import java.io.File
+
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.conf.Configuration
+
+object PathToFileConverter {
+
+  def fileToPath(path: Path, conf: Configuration): File = {
+    val fs = FileSystem.get(path.toUri, conf)
+    val tempFile = File.createTempFile(path.getName, "")
+    tempFile.deleteOnExit()
+    fs.copyToLocalFile(path, new Path(tempFile.getAbsolutePath))
+    tempFile
   }
 }

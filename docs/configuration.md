@@ -286,10 +286,12 @@ The following table outlines the available parameters.
   <td><code>quantities</code></td>
   <td>
     An array containing one or more of the supported quantities: 
-    "cluster-size-distribution" or "partition-sizes". "cluster-size-distribution" 
-    computes the distribution of entity cluster sizes along the chain and 
+    "cluster-size-distribution", "partition-sizes", or 
+    "shared-most-probable-clusters". "cluster-size-distribution" 
+    computes the distribution of entity cluster sizes along the chain; 
     "partition-sizes" computes the number of entities in each partition along 
-    the chain.
+    the chain; and "shared-most-probable-clusters" computes a point 
+    estimate of the linkage structure.
   </td>
 </tr>
 </table>

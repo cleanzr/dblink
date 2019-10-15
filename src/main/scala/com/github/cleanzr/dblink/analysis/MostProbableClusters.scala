@@ -1,4 +1,4 @@
-// Copyright (C) 2018  Australian Bureau of Statistics
+// Copyright (C) 2018  Neil Marchant
 //
 // Author: Neil Marchant
 //
@@ -17,13 +17,17 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import com.github.cleanzr.dblink.Run
-import org.apache.spark.{SparkConf, SparkContext}
+package com.github.cleanzr.dblink.analysis
 
-object Launch {
-  def main(args: Array[String]) {
-    val conf = new SparkConf().setMaster("local[2]").setAppName("dblink")
-    val sc = SparkContext.getOrCreate(conf)
-    Run.main(args)
-  }
+import com.github.cleanzr.dblink.{Cluster, RecordId}
+import org.apache.spark.rdd.RDD
+
+class MostProbableClusters(val rdd: RDD[(RecordId, (Cluster, Double))]) {
+  /** Converts to a `Clusters` object. Strips record identifier and probability info.
+    *
+    * TODO: title
+    *
+    * @return
+    */
+  def toClusters: RDD[Cluster] = rdd.map(_._2._1)
 }
