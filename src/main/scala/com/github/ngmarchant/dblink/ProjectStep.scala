@@ -33,7 +33,7 @@ trait ProjectStep {
 object ProjectStep {
   private val supportedSamplers = Set("PCG-I", "PCG-II", "Gibbs", "Gibbs-Sequential")
   private val supportedEvaluationMetrics = Set("pairwise", "cluster")
-  private val supportedSummaryQuantities = Set("cluster-size-distribution", "partition-sizes")
+  private val supportedSummaryQuantities = Set("cluster-size-distribution", "partition-sizes", "shared-most-probable-clusters")
 
   class SampleStep(project: Project, sampleSize: Int, burninInterval: Int,
                      thinningInterval: Int, resume: Boolean, sampler: String) extends ProjectStep with Logging {
@@ -91,7 +91,7 @@ object ProjectStep {
         project.getSavedLinkageChain(lowerIterationCutoff) match {
           case Some(chain) =>
             val sMPC = chain.sharedMostProbableClusters.persist()
-            sMPC.saveCsv(project.outputPath + "shared-most-probable-clusters.csv")
+            chain.saveSharedMostProbableClusters(project.outputPath)
             chain.unpersist()
             Some(sMPC)
           case None =>
@@ -136,6 +136,7 @@ object ProjectStep {
           quantities.foreach {
             case "cluster-size-distribution" => chain.saveClusterSizeDistribution(project.outputPath)
             case "partition-sizes" => chain.savePartitionSizes(project.outputPath)
+            case "shared-most-probable-clusters" => chain.saveSharedMostProbableClusters(project.outputPath)
           }
         case None => error("No linkage chain")
       }
