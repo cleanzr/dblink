@@ -80,7 +80,7 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
     lines ++= matchingAttributes.zipWithIndex.map { case (attribute, attributeId) =>
       s"  * '${attribute.name}' (id=$attributeId) with ${attribute.similarityFn.mkString} and ${attribute.distortionPrior.mkString}"
     }
-    lines += s"  * Size of latent population is ${populationSize.getOrElse(recordsRDD.count())}"
+    lines += s"  * Size of latent population is ${populationSize.getOrElse(dataFrame.count())}"
     lines += ""
 
     lines += "Partition function settings"
@@ -117,31 +117,6 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
     hdfs.exists(file)
   }
 
-  /** Transform a source DataFrame into an RDD of `Records` (the format required by dblink).
-    */
-  def recordsRDD: RDD[Record[String]] = {
-    val spark = dataFrame.sparkSession
-    import spark.implicits._
-
-    fileIdAttribute match {
-      case Some(fIdCol) =>
-        dataFrame.select(
-          col(recIdAttribute),
-          col(fIdCol),
-          array(matchingAttributes.map(_.name) map col: _*)
-        ).map(r =>
-          Record(r.getString(0), r.getString(1), r.getSeq[String](2).toArray)
-        ).rdd
-      case None =>
-        dataFrame.select(
-          col(recIdAttribute),
-          array(matchingAttributes.map(_.name) map col: _*)
-        ).map(r =>
-          Record(r.getString(0), "0", r.getSeq[String](1).toArray)
-        ).rdd
-    }
-  }
-
   /** Loads the ground truth cluster membership for each record. */
   def membershipRDD: Option[RDD[(RecordId, EntityId)]] = {
     entIdAttribute match {
@@ -172,11 +147,13 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
   def generateInitialState: State = {
     info("Generating new initial state")
     val parameters = Parameters(
-      populationSize = populationSize.getOrElse(recordsRDD.count()),
+      populationSize = populationSize.getOrElse(dataFrame.count()),
       maxClusterSize = expectedMaxClusterSize
     )
     State.deterministic(
-      records = recordsRDD,
+      records = dataFrame,
+      recIdColname = recIdAttribute,
+      fileIdColname = fileIdAttribute,
       attributeSpecs = matchingAttributes,
       parameters = parameters,
       partitionFunction = partitionFunction,

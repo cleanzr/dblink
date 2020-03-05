@@ -30,7 +30,8 @@ import org.apache.commons.math3.random.{MersenneTwister, RandomGenerator}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions.{array, col}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.storage.StorageLevel
 
 import scala.collection.mutable
@@ -195,10 +196,11 @@ object State {
   /** Initialise a new State object based on a simple deterministic method.
     *
     * @param records RDD containing records to link
-    * @param attributeSpecs model parameters associated with each attribute
+    * @param attributeSpecs A sequence of `Attribute` instances, each of which specifies the model parameters
+    *                       associated with a matching attribute.
     * @param parameters other model parameters
-    * @param partitionFunction
-    * @param randomSeed random seed
+    * @param partitionFunction A `PartitionFunction` which specifies how the space of entities is partitioned
+    * @param randomSeed A long random seed
     * @return a `State` object.
     */
   def deterministic(records: RDD[Record[String]],
@@ -321,5 +323,47 @@ object State {
 
     State(0l, partitions, distProbs, summaryVars, accumulators, partitioner, randomSeed,
       bcParameters, bcPartitionFunction, bcRecordsCache)
+  }
+
+  /** Initialise a new State object based on a simple deterministic method.
+    *
+    * @param records A DataFrame containing the records to link
+    * @param recIdColname Name of column in `records` that contains record ids
+    * @param fileIdColname  Name of column in `records` that contains file/source ids (optional)
+    * @param attributeSpecs A sequence of `Attribute` instances, each of which specifies the model parameters
+    *                       associated with a matching attribute.
+    * @param parameters Other model parameters
+    * @param partitionFunction A `PartitionFunction` which specifies how the space of entities is partitioned
+    * @param randomSeed A long random seed
+    * @return a `State` object.
+    */
+  def deterministic(records: DataFrame,
+                    recIdColname: String,
+                    fileIdColname: Option[String],
+                    attributeSpecs: IndexedSeq[Attribute],
+                    parameters: Parameters,
+                    partitionFunction: PartitionFunction[ValueId],
+                    randomSeed: Long): State = {
+    val spark = records.sparkSession
+    import spark.implicits._
+
+    val rdd: RDD[Record[String]] = fileIdColname match {
+      case Some(fIdCol) =>
+        records.select(
+          col(recIdColname),
+          col(fIdCol),
+          array(attributeSpecs.map(_.name) map col: _*)
+        ).map(r =>
+          Record(r.getString(0), r.getString(1), r.getSeq[String](2).toArray)
+        ).rdd
+      case None =>
+        records.select(
+          col(recIdColname),
+          array(attributeSpecs.map(_.name) map col: _*)
+        ).map(r =>
+          Record(r.getString(0), "0", r.getSeq[String](1).toArray)
+        ).rdd
+    }
+    deterministic(rdd, attributeSpecs, parameters, partitionFunction, randomSeed)
   }
 }
