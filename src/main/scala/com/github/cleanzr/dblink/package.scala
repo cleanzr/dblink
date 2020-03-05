@@ -20,7 +20,6 @@
 package com.github.cleanzr
 
 import com.github.cleanzr.dblink.SimilarityFn.ConstantSimilarityFn
-import com.github.cleanzr.dblink.SimilarityFn.ConstantSimilarityFn
 
 /** Types/case classes used throughout */
 package object dblink {
