@@ -194,10 +194,11 @@ object State {
 
   /** Initialise a new State object based on a simple deterministic method.
     *
-    * @param records Dataset containing records to link.
-    * @param parameters eber parameters.
+    * @param records RDD containing records to link
+    * @param attributeSpecs model parameters associated with each attribute
+    * @param parameters other model parameters
     * @param partitionFunction
-    * @param randomSeed
+    * @param randomSeed random seed
     * @return a `State` object.
     */
   def deterministic(records: RDD[Record[String]],
@@ -213,12 +214,11 @@ object State {
     val bcRecordsCache = sc.broadcast(recordsCache)
     val bcParameters = sc.broadcast(parameters)
 
-    /** Initialize the partitions of entity-record pairs.
-      * - links: each record is linked to a unique entity
-      * - distortion: no distortion
-      * - entity values: copied directly from the records (missing generated randomly)
+    /** Divide the entities among the partitions using a heuristic bin-packing method
+      *
+      * Starting point: set the number of entities equal to the number of records in the partition.
+      * Then, iteratively refine by adding/subtracting entities from partitions until the target number is reached.
       */
-    // Compute number of entities per partition
     val numRecsPartition = records.mapPartitions(x => Array(x.size).iterator).collect()
     assert(parameters.populationSize > numRecsPartition.size, "Too few entities. Need at least one entity per partition")
     val numEntsPartition = {
@@ -242,6 +242,11 @@ object State {
       temp
     }
 
+    /** Initialize the partitions of entity-record pairs.
+      * - links: each record is preferentially linked to a unique entity
+      * - distortion: prefer no distortion
+      * - entity values: copied directly from the records (missing generated randomly)
+      */
     val entRecPairs = recordsCache.transformRecords(records) // map string attribute values to integer ids
       .mapPartitionsWithIndex((partId, partition) => {       // generate latent variables
         /** Ensure we get different pseudo-random numbers on each partition */
@@ -253,13 +258,12 @@ object State {
         val numEntities = numEntsPartition(partId) // number of entities in this partition
         val firstEntId = numEntsPartition.take(partId).sum // ensures unique entity ids across all partitions
 
-        /** Need to convert data from iterator to an array, as we need support for indexing */
+        /** Convert from an iterator to an array, as we need support for indexing */
         val records = partition.toArray
 
         val recordsIt = records.zipWithIndex.iterator.map { case (Record(id, fileId, values), i) =>
-          /** Initialize entity values using record values. Prefer to
-            * use linked record values, but allows for the case where numEntities < numRecords
-            * by taking the modulus */
+          /** Initialize entity values using record values. Prefer to use linked record values, but allow for
+            * the case where numEntities < numRecords by taking the modulus */
           val linkRecId = i % numEntities
           val entId = firstEntId + linkRecId
           val pickedRecValues = records(linkRecId).values
@@ -268,8 +272,7 @@ object State {
             case (valueId, _) if valueId >= 0 => valueId
             case (_, IndexedAttribute(_, _, _, index)) =>  index.draw()
           }
-          /** Initialize the distortion indicators. Prefer no distortion unless values
-            * disagree */
+          /** Initialize the distortion indicators. Prefer no distortion unless values disagree */
           val distValues = (values, entValues).zipped.map {
             case (recValue, entValue) => DistortedValue(recValue, distorted = recValue != entValue)
           }
