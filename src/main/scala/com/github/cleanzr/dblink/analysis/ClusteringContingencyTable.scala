@@ -20,10 +20,11 @@
 package com.github.cleanzr.dblink.analysis
 
 import ClusteringContingencyTable.ContingencyTableRow
-import org.apache.spark.rdd.RDD
+import com.github.cleanzr.dblink.Cluster
+import org.apache.spark.sql.Dataset
 import org.apache.spark.storage.StorageLevel
 
-case class ClusteringContingencyTable(table: RDD[ContingencyTableRow],
+case class ClusteringContingencyTable(table: Dataset[ContingencyTableRow],
                                       size: Long) {
   def persist(newLevel: StorageLevel) {
     table.persist(newLevel)
@@ -39,8 +40,9 @@ object ClusteringContingencyTable {
 
   // Note: this is a sparse representation of the contingency table. Cluster
   // pairs which are not present in the table have no common elements.
-  def apply(predictedClusters: Clusters,
-            trueClusters: Clusters): ClusteringContingencyTable = {
+  def apply(predictedClusters: Dataset[Cluster], trueClusters: Dataset[Cluster]): ClusteringContingencyTable = {
+    val spark = predictedClusters.sparkSession
+    import spark.implicits._
     // Convert to membership representation
     val predictedMembership = predictedClusters.toMembership
     val trueMembership = trueClusters.toMembership
@@ -52,7 +54,7 @@ object ClusteringContingencyTable {
     // checking after join...)
     if (predictedSize != trueSize) throw new Exception("Clusterings do not partition the same set of elements.")
 
-    val joined = predictedMembership.join(trueMembership).persist(StorageLevel.MEMORY_ONLY_SER)
+    val joined = predictedMembership.rdd.join(trueMembership.rdd).persist(StorageLevel.MEMORY_ONLY_SER)
     val joinedSize = joined.count()
 
     // Continued checking...
@@ -61,6 +63,7 @@ object ClusteringContingencyTable {
     val table = joined.map{case (_, (predictedUID, trueUID)) => ((predictedUID, trueUID), 1)}
       .reduceByKey(_ + _)
       .map{case ((predictedUID, trueUID), count) => ContingencyTableRow(predictedUID, trueUID, count)}
+      .toDS()
 
     joined.unpersist()
 

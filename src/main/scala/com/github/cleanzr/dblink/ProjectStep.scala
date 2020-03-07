@@ -21,6 +21,7 @@ package com.github.cleanzr.dblink
 
 import com.github.cleanzr.dblink.analysis.{ClusteringMetrics, PairwiseMetrics}
 import com.github.cleanzr.dblink.util.BufferedFileWriter
+import com.github.cleanzr.dblink.LinkageChain._
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.spark.storage.StorageLevel
 
@@ -45,7 +46,7 @@ object ProjectStep {
     override def execute(): Unit = {
       info(mkString)
       val initialState = if (resume) {
-        project.getSavedState.getOrElse(project.generateInitialState)
+        project.savedState.getOrElse(project.generateInitialState)
       } else {
         project.generateInitialState
       }
@@ -71,27 +72,28 @@ object ProjectStep {
     require(metrics.forall(m => supportedEvaluationMetrics.contains(m)), s"metrics must be one of ${supportedEvaluationMetrics.mkString("{", ", ", "}")}.")
 
     override def execute(): Unit = {
-      import com.github.cleanzr.dblink.analysis.implicits._
       info(mkString)
 
       // Get ground truth clustering
-      val trueClusters = project.getTrueClusters match {
+      val trueClusters = project.trueClusters match {
         case Some(clusters) => clusters.persist()
         case None =>
           error("Ground truth clusters are unavailable")
           return
       }
 
+      import analysis._
+
       // Get predicted clustering (using sMPC method)
       val sMPC = if (useExistingSMPC && project.sharedMostProbableClustersOnDisk) {
         // Read saved sMPC from disk
-        project.getSavedSharedMostProbableClusters
+        project.savedSharedMostProbableClusters
       } else {
         // Try to compute sMPC using saved linkage chain (and save to disk)
-        project.getSavedLinkageChain(lowerIterationCutoff) match {
+        project.savedLinkageChain(lowerIterationCutoff) match {
           case Some(chain) =>
-            val sMPC = chain.sharedMostProbableClusters.persist()
-            chain.saveSharedMostProbableClusters(project.outputPath)
+            val sMPC = sharedMostProbableClusters(chain).persist()
+            sMPC.saveCsv(project.outputPath + "shared-most-probable-clusters.csv")
             chain.unpersist()
             Some(sMPC)
           case None =>
@@ -129,14 +131,22 @@ object ProjectStep {
 
     override def execute(): Unit = {
       info(mkString)
-
-      import com.github.cleanzr.dblink.analysis.implicits._
-      project.getSavedLinkageChain(lowerIterationCutoff) match {
+      project.savedLinkageChain(lowerIterationCutoff) match {
         case Some(chain) =>
           quantities.foreach {
-            case "cluster-size-distribution" => chain.saveClusterSizeDistribution(project.outputPath)
-            case "partition-sizes" => chain.savePartitionSizes(project.outputPath)
-            case "shared-most-probable-clusters" => chain.saveSharedMostProbableClusters(project.outputPath)
+            case "cluster-size-distribution" => {
+              val clustSizeDist = clusterSizeDistribution(chain)
+              saveClusterSizeDistribution(clustSizeDist, project.outputPath)
+            }
+            case "partition-sizes" => {
+              val partSizes = partitionSizes(chain)
+              savePartitionSizes(partSizes, project.outputPath)
+            }
+            case "shared-most-probable-clusters" => {
+              import analysis._
+              val smpc = sharedMostProbableClusters(chain)
+              smpc.saveCsv(project.outputPath + "shared-most-probable-clusters.csv")
+            }
           }
         case None => error("No linkage chain")
       }

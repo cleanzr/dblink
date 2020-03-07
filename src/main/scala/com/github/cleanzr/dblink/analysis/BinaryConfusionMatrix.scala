@@ -20,12 +20,13 @@
 package com.github.cleanzr.dblink.analysis
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Dataset
 
-case class BinaryConfusionMatrix(numTruePositives: Long,
-                                 numFalsePositives: Long,
-                                 numFalseNegatives: Long) {
-  val numPositives: Long = numTruePositives + numFalseNegatives
-  val numPredictedPositives: Long = numTruePositives + numFalsePositives
+case class BinaryConfusionMatrix(TP: Long,
+                                 FP: Long,
+                                 FN: Long) {
+  def P: Long = TP + FN
+  def PP: Long = TP + FP
 }
 
 object BinaryConfusionMatrix {
@@ -47,6 +48,20 @@ object BinaryConfusionMatrix {
     val accFP = sc.longAccumulator("FP")
     val accFN = sc.longAccumulator("FN")
     predictionsAndLabels.foreach {case (prediction, label) =>
+      if (prediction & label) accTP.add(1L)
+      if (prediction & !label) accFP.add(1L)
+      if (!prediction & label) accFN.add(1L)
+    }
+    BinaryConfusionMatrix(accTP.value, accFP.value, accFN.value)
+  }
+
+  def apply(predictionsAndLabels: Dataset[(Boolean, Boolean)]): BinaryConfusionMatrix = {
+    val spark = predictionsAndLabels.sparkSession
+    val sc = spark.sparkContext
+    val accTP = sc.longAccumulator("TP")
+    val accFP = sc.longAccumulator("FP")
+    val accFN = sc.longAccumulator("FN")
+    predictionsAndLabels.rdd.foreach { case (prediction, label) =>
       if (prediction & label) accTP.add(1L)
       if (prediction & !label) accFP.add(1L)
       if (!prediction & label) accFN.add(1L)

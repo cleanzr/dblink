@@ -19,6 +19,9 @@
 
 package com.github.cleanzr.dblink.analysis
 
+import com.github.cleanzr.dblink.RecordPair
+import org.apache.spark.sql.Dataset
+
 case class PairwiseMetrics(precision: Double,
                            recall: Double,
                            f1score: Double) {
@@ -38,8 +41,8 @@ case class PairwiseMetrics(precision: Double,
 }
 
 object PairwiseMetrics {
-  def LinksConfusionMatrix(predictedLinks: PairwiseLinks,
-                           trueLinks: PairwiseLinks): BinaryConfusionMatrix = {
+  def LinksConfusionMatrix(predictedLinks: Dataset[RecordPair],
+                           trueLinks: Dataset[RecordPair]): BinaryConfusionMatrix = {
     // Create PairRDDs so we can use the fullOuterJoin function
     val predictedLinks2 = predictedLinks.rdd.map(pair => (pair, true))
     val trueLinks2 = trueLinks.rdd.map(pair => (pair, true))
@@ -48,8 +51,8 @@ object PairwiseMetrics {
     BinaryConfusionMatrix(joinedLinks)
   }
 
-  def apply(predictedLinks: PairwiseLinks,
-            trueLinks: PairwiseLinks): PairwiseMetrics = {
+  def apply(predictedLinks: Dataset[RecordPair],
+            trueLinks: Dataset[RecordPair]): PairwiseMetrics = {
     val confusionMatrix = LinksConfusionMatrix(predictedLinks, trueLinks)
 
     val precision = BinaryClassificationMetrics.precision(confusionMatrix)

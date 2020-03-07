@@ -23,7 +23,6 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import com.github.cleanzr.dblink.partitioning.PartitionFunction
 import com.github.cleanzr.dblink.util.{HardPartitioner, PeriodicRDDCheckpointer}
-import com.github.cleanzr.dblink.util.{HardPartitioner, PeriodicRDDCheckpointer}
 import com.github.cleanzr.dblink.GibbsUpdates.{updateDistProbs, updatePartitions, updateSummaryVariables}
 import com.github.cleanzr.dblink.partitioning.PartitionFunction
 import org.apache.commons.math3.random.{MersenneTwister, RandomGenerator}
@@ -48,11 +47,14 @@ import scala.collection.mutable.ArrayBuffer
   * @param summaryVars collection of quantities that summarise the state. Each
   *                    quantity is a function of `partitions` and `distProbs`.
   * @param accumulators accumulators used for calculating `summaryVars`.
-  * @param rand random number generator used for updating the distortion
-  *             probabilities on the driver.
   * @param partitioner used to repartition `partitions` after it is updated.
+  * @param randomSeed
+  * @param bcParameters
+  * @param bcPartitionFunction
   * @param bcRecordsCache broadcast variable that contains objects required on each
   *                node.
+  * @param rand random number generator used for updating the distortion
+  *             probabilities on the driver.
   */
 case class State(iteration: Long,
                  partitions: Partitions,

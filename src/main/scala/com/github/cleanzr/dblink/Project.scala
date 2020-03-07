@@ -20,15 +20,14 @@
 package com.github.cleanzr.dblink
 
 import SimilarityFn.{ConstantSimilarityFn, LevenshteinSimilarityFn}
-import com.github.cleanzr.dblink.analysis.Clusters
-import com.github.cleanzr.dblink.analysis.Clusters
+import com.github.cleanzr.dblink.analysis._
 import partitioning.{KDTreePartitioner, PartitionFunction}
 import com.typesafe.config.{Config, ConfigException, ConfigObject}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.{array, col}
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -104,42 +103,28 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
     hdfs.exists(fSMPC)
   }
 
-  def savedStateOnDisk: Boolean = {
-    val hdfs = FileSystem.get(sparkContext.hadoopConfiguration)
-    val fDriverState = new Path(outputPath + "driver-state")
-    val fPartitionState = new Path(outputPath + "partitions-state.parquet")
-    hdfs.exists(fDriverState) && hdfs.exists(fPartitionState)
-  }
-
-  def linkageChainOnDisk: Boolean = {
-    val hdfs = FileSystem.get(sparkContext.hadoopConfiguration)
-    val file = new Path(outputPath + "linkage-chain.parquet")
-    hdfs.exists(file)
-  }
-
-  /** Loads the ground truth cluster membership for each record. */
-  def membershipRDD: Option[RDD[(RecordId, EntityId)]] = {
-    entIdAttribute match {
-      case Some(eId) =>
-        val spark = dataFrame.sparkSession
-        val recIdName = recIdAttribute
-        import spark.implicits._
-        Some(dataFrame.map(r => (r.getAs[RecordId](recIdName), r.getAs[EntityId](eId))).rdd)
-      case _ => None
+  def savedLinkageChain(lowerIterationCutoff: Int = 0): Option[Dataset[LinkageState]] = {
+    val savedLinkageChainExists = {
+      val hdfs = FileSystem.get(sparkContext.hadoopConfiguration)
+      val file = new Path(outputPath + "linkage-chain.parquet")
+      hdfs.exists(file)
     }
-  }
-
-  def getSavedLinkageChain(lowerIterationCutoff: Int = 0): Option[RDD[LinkageState]] = {
-    if (linkageChainOnDisk) {
-      val chain = if (lowerIterationCutoff == 0) LinkageChain.read(outputPath)
-        else LinkageChain.read(outputPath).filter(_.iteration >= lowerIterationCutoff)
-      if (chain.isEmpty()) None
+    if (savedLinkageChainExists) {
+      val chain = if (lowerIterationCutoff == 0) LinkageChain.readLinkageChain(outputPath)
+        else LinkageChain.readLinkageChain(outputPath).filter(_.iteration >= lowerIterationCutoff)
+      if (chain.take(1).isEmpty) None
       else Some(chain)
     } else None
   }
 
-  def getSavedState: Option[State] = {
-    if (savedStateOnDisk) {
+  def savedState: Option[State] = {
+    val savedStateExists = {
+      val hdfs = FileSystem.get(sparkContext.hadoopConfiguration)
+      val fDriverState = new Path(outputPath + "driver-state")
+      val fPartitionState = new Path(outputPath + "partitions-state.parquet")
+      hdfs.exists(fDriverState) && hdfs.exists(fPartitionState)
+    }
+    if (savedStateExists) {
       Some(State.read(outputPath))
     } else None
   }
@@ -161,15 +146,23 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
     )
   }
 
-  def getSavedSharedMostProbableClusters: Option[RDD[Cluster]] = {
+  def savedSharedMostProbableClusters: Option[Dataset[Cluster]] = {
     if (sharedMostProbableClustersOnDisk) {
-      Some(Clusters.readCsv(outputPath + "shared-most-probable-clusters.csv"))
+      Some(readClustersCSV(outputPath + "shared-most-probable-clusters.csv"))
     } else None
   }
 
-  def getTrueClusters: Option[RDD[Cluster]] = {
-    membershipRDD match {
-      case Some(membership) => Some(Clusters(membership))
+  /**
+    * Loads the ground truth clustering, if available.
+    */
+  def trueClusters: Option[Dataset[Cluster]] = {
+    entIdAttribute match {
+      case Some(eId) =>
+        val spark = dataFrame.sparkSession
+        val recIdName = recIdAttribute
+        import spark.implicits._
+        val membership = dataFrame.map(r => (r.getAs[RecordId](recIdName), r.getAs[EntityId](eId)))
+        Some(membershipToClusters(membership))
       case _ => None
     }
   }

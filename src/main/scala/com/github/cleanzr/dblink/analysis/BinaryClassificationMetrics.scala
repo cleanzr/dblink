@@ -21,11 +21,11 @@ package com.github.cleanzr.dblink.analysis
 
 object BinaryClassificationMetrics {
   def precision(binaryConfusionMatrix: BinaryConfusionMatrix): Double = {
-    binaryConfusionMatrix.numTruePositives.toDouble / binaryConfusionMatrix.numPredictedPositives
+    binaryConfusionMatrix.TP.toDouble / binaryConfusionMatrix.PP
   }
 
   def recall(binaryConfusionMatrix: BinaryConfusionMatrix): Double = {
-    binaryConfusionMatrix.numTruePositives.toDouble / binaryConfusionMatrix.numPositives
+    binaryConfusionMatrix.TP.toDouble / binaryConfusionMatrix.P
   }
 
   def fMeasure(binaryConfusionMatrix: BinaryConfusionMatrix,

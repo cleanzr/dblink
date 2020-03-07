@@ -46,7 +46,7 @@ object Sampler extends Logging {
     *                           Defaults to false.
     * @param collapsedEntityValues A Boolean specifying whether to collapse the distotions when updating the entity
     *                              values. Defaults to true.
-    * @return the final state of the Markov chain.
+    * @return The final state of the Markov chain.
     */
   def sample(initialState: State,
              sampleSize: Int,

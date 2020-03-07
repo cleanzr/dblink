@@ -34,7 +34,9 @@ package object dblink {
   type Partitions = RDD[(PartitionId, EntRecPair)]
   type AggDistortions = Map[(AttributeId, FileId), Long]
   type Cluster = Set[RecordId]
+  type RecordPair = (RecordId, RecordId)
 
+  case class MostProbableCluster(recordId: RecordId, cluster: Set[RecordId], frequency: Double)
 
   /** Record (row) in the input data
     *

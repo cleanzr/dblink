@@ -19,7 +19,9 @@
 
 package com.github.cleanzr.dblink.analysis
 
+import com.github.cleanzr.dblink.Cluster
 import org.apache.commons.math3.util.CombinatoricsUtils.binomialCoefficient
+import org.apache.spark.sql.Dataset
 import org.apache.spark.storage.StorageLevel
 
 case class ClusteringMetrics(adjRandIndex: Double) {
@@ -41,7 +43,7 @@ object ClusteringMetrics {
 
   def AdjustedRandIndex(contingencyTable: ClusteringContingencyTable): Double = {
     // Compute sum_{PredictedUID} comb2(sum_{TrueUID} NumCommonElements(PredictedUID, TrueUID))
-    val predCombSum = contingencyTable.table
+    val predCombSum = contingencyTable.table.rdd
       .map(row => (row.PredictedUID, row.NumCommonElements))
       .reduceByKey(_ + _)     // sum over True UID
       .aggregate(0L)(
@@ -50,7 +52,7 @@ object ClusteringMetrics {
       )
 
     // Compute sum_{TrueUID} comb2(sum_{PredictedUID} NumCommonElements(PredictedUID, TrueUID))
-    val trueCombSum = contingencyTable.table
+    val trueCombSum = contingencyTable.table.rdd
       .map(row => (row.TrueUID, row.NumCommonElements))
       .reduceByKey(_ + _)     // sum over Pred UID
       .aggregate(0L)(
@@ -59,7 +61,7 @@ object ClusteringMetrics {
       )
 
     // Compute sum_{TrueUID} sum_{PredictedUID} comb2(NumCommonElements(PredictedUID, TrueUID))
-    val totalCombSum = contingencyTable.table
+    val totalCombSum = contingencyTable.table.rdd
       .aggregate(0L)(
         seqOp = (sum, x) => sum + comb2(x.NumCommonElements),
         combOp = _ + _          // apply comb2(.) and sum over PredictedUID & TrueUID
@@ -71,8 +73,8 @@ object ClusteringMetrics {
     (totalCombSum - expectedIndex)/(maxIndex - expectedIndex)
   }
 
-  def apply(predictedClusters: Clusters,
-            trueClusters: Clusters): ClusteringMetrics = {
+  def apply(predictedClusters: Dataset[Cluster],
+            trueClusters: Dataset[Cluster]): ClusteringMetrics = {
     val contingencyTable = ClusteringContingencyTable(predictedClusters, trueClusters)
     contingencyTable.persist(StorageLevel.MEMORY_ONLY_SER)
     val adjRandIndex = AdjustedRandIndex(contingencyTable)
