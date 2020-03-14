@@ -118,6 +118,7 @@ object Sampler extends Logging {
     linkageWriter = linkageWriter.flush()
     diagnosticsWriter.close()
     state.save(outputPath)
+    checkpointer.deleteAllCheckpoints()
     info(s"Finished writing to disk at $outputPath")
     state
   }
