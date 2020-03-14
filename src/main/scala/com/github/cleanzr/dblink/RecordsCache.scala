@@ -130,6 +130,6 @@ object RecordsCache extends Logging {
         }
         Record[ValueId](record.id, record.fileId, mappedValues)
       }
-    },true)
+    }, preservesPartitioning = true)
   }
 }
