@@ -7,7 +7,7 @@ val typesafe = "com.typesafe" % "config" % "1.3.2"
 val jvptree = "com.eatthepath" % "jvptree" % "0.2"
 
 ThisBuild / name := "dblink"
-ThisBuild / version := "0.1-dev"
+ThisBuild / version := "0.2.0"
 ThisBuild / scalaVersion := "2.11.12"
 
 ThisBuild / developers := List(
