@@ -42,8 +42,8 @@ command:
 $SPARK_HOME/bin/spark-submit \
   --master "local[*]" \
   --conf "spark.driver.extraJavaOptions=-Dlog4j.configuration=log4j.properties" \
-  --conf "spark.driver.extraClassPath=./target/scala-2.11/dblink-assembly-0.1.jar" \
-  ./target/scala-2.11/dblink-assembly-0.1.jar \
+  --conf "spark.driver.extraClassPath=./target/scala-2.11/dblink-assembly-0.2.0.jar" \
+  ./target/scala-2.11/dblink-assembly-0.2.0.jar \
   ./examples/RLdata500.conf
 ```
 (To run with RLdata10000 instead, replace `RLdata500.conf` with 
@@ -76,7 +76,7 @@ within the project directory:
 $ sbt assembly
 ```
 
-This should output a JAR file at `./target/scala-2.11/dblink-assembly-0.1.jar`
+This should output a JAR file at `./target/scala-2.11/dblink-assembly-0.2.0.jar`
 relative to the project directory.
 Note that the JAR file does not bundle Spark or Hadoop, but it does include
 all other dependencies.

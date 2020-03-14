@@ -43,18 +43,18 @@ pseudocluster mode on a macOS or Linux system.
 First, download the prebuilt 2.3.1 release from the Spark
 [release archive](https://archive.apache.org/dist/spark/).
 ```bash
-$ wget https://archive.apache.org/dist/spark/spark-2.3.1/spark-2.3.1-bin-hadoop2.7.tgz
+$ wget https://archive.apache.org/dist/spark/spark-2.4.5/spark-2.4.5-bin-hadoop2.7.tgz
 ```
 then extract the archive.
 ```bash
-$ tar -xvf spark-2.3.1-bin-hadoop2.7.tgz
+$ tar -xvf spark-2.4.5-bin-hadoop2.7.tgz
 ```
 
 Move the Spark folder to `/opt` and create a symbolic link so that you can 
 easily switch to another version in the future.
 ```bash
-$ sudo mv spark-2.3.1-bin-hadoop2.7 /opt
-$ sudo ln -s /opt/spark-2.3.1-bin-hadoop2.7/ /opt/spark
+$ sudo mv spark-2.4.5-bin-hadoop2.7 /opt
+$ sudo ln -s /opt/spark-2.4.5-bin-hadoop2.7/ /opt/spark
 ```
 
 Define the `SPARK_HOME` variable and add the Spark binaries to your `PATH`. 
@@ -82,13 +82,13 @@ variables are typically defined in `~/.bash_profile` rather than
 
 ## 2. Obtain the dblink JAR file
 In this step you'll obtain the dblink fat JAR, which has file name 
-`dblink-assembly-0.1.jar`.
+`dblink-assembly-0.2.0.jar`.
 It contains all of the class files and resources for dblink, packed together 
 with any dependencies.
 
 There are two options:
 * (Recommended) Download a prebuilt JAR from [here](https://github.com/ngmarchant/dblink/releases). 
-This has been built against Spark 2.3.1 and is not guaranteed to work with 
+This has been built against Spark 2.4.5 and is not guaranteed to work with 
 other versions of Spark.
 * Build the fat JAR file from source as explained in the section below.
 
@@ -107,14 +107,14 @@ $ sbt about
 Once you've successfully installed sbt, get the dblink source code from 
 GitHub:
 ```bash
-$ git clone https://github.com/ngmarchant/dblink.git
+$ git clone https://github.com/cleanzr/dblink.git
 ```
 then change into the dblink directory and build the package
 ```bash
 $ cd dblink
 $ sbt assembly
 ```
-This should produce a fat JAR at `./target/scala-2.11/dblink-assembly-0.1.jar`.
+This should produce a fat JAR at `./target/scala-2.11/dblink-assembly-0.2.0.jar`.
 
 _Note: [IntelliJ IDEA](https://www.jetbrains.com/idea/) can also be used to 
 build the fat JAR. It is arguably more user-friendly as it has a GUI and 
@@ -132,8 +132,8 @@ From within the `dblink` directory, run the following command:
 $SPARK_HOME/bin/spark-submit \
   --master "local[1]" \
   --conf "spark.driver.extraJavaOptions=-Dlog4j.configuration=log4j.properties" \
-  --conf "spark.driver.extraClassPath=./target/scala-2.11/dblink-assembly-0.1.jar" \
-  ./target/scala-2.11/dblink-assembly-0.1.jar \
+  --conf "spark.driver.extraClassPath=./target/scala-2.11/dblink-assembly-0.2.0.jar" \
+  ./target/scala-2.11/dblink-assembly-0.2.0.jar \
   ./examples/RLdata500.conf
 ```
 This will run Spark in pseudocluster (local) mode with 1 core. You can increase 

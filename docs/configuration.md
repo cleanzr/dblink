@@ -21,8 +21,8 @@ dblink can be run using `spark-submit` as follows:
 $ $SPARK_HOME/bin/spark-submit \
     --master local[1] \
     --conf "spark.driver.extraJavaOptions=-Dlog4j.configuration=/path/to/log4j.properties" \
-    --conf "spark.driver.extraClassPath=/path/to/dblink-assembly-0.1.jar" \
-    /path/to/dblink-assembly-0.1.jar \
+    --conf "spark.driver.extraClassPath=/path/to/dblink-assembly-0.2.0.jar" \
+    /path/to/dblink-assembly-0.2.0.jar \
     /path/to/my-dblink.conf
 ```
 
