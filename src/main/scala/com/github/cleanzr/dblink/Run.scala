@@ -19,7 +19,6 @@
 
 package com.github.cleanzr.dblink
 
-import com.github.cleanzr.dblink.util.PathToFileConverter
 import com.github.cleanzr.dblink.util.{BufferedFileWriter, PathToFileConverter}
 import com.typesafe.config.ConfigFactory
 import org.apache.spark.sql.SparkSession
@@ -48,35 +47,4 @@ object Run extends App with Logging {
   steps.execute()
 
   sc.stop()
-
-//  def evaluate(projectPath: String,
-//               membership: RDD[(RecordId, EntityId)],
-//               linkageChain: RDD[LinkageState],
-//               lowerIterationCutoff: Long = 0L): Unit = {
-//    import com.github.cleanzr.dblink.analysis.implicits._
-//
-//    val trueClusters = Clusters(membership)
-//    info("Writing true clusters to disk.")
-//    trueClusters.saveCsv(projectPath + "trueClusters.csv")
-//
-//    info("Writing cluster size distribution along the chain to disk.")
-//    linkageChain.clusterSizeDistribution(projectPath)
-//
-//    val mpc = linkageChain.filter(_.iteration >= lowerIterationCutoff).mostProbableClusters.persist()
-//    info("Evaluating most probable clusters against ground truth.")
-//    val mpcClusters = mpc.toClusters
-//    info(PairwiseMetrics(mpcClusters.toPairwiseLinks, trueClusters.toPairwiseLinks).mkString)
-//
-//    val sMPC = LinkageChain._sharedMostProbableClusters(mpc).persist()
-//    info("Writing shared most probable clusters to disk.")
-//    sMPC.saveCsv(projectPath + "sMPC.csv")
-//    mpc.unpersist()
-//
-//    info("Evaluating shared most probable clusters against ground truth.")
-//    info(s"True number of entities:        ${trueClusters.count()}")
-//    info(s"Predicted number of entities:   ${sMPC.count()}")
-//    info(PairwiseMetrics(sMPC.toPairwiseLinks, trueClusters.toPairwiseLinks).mkString)
-//    info(ClusteringMetrics(sMPC, trueClusters).mkString)
-//    sMPC.unpersist()
-//  }
 }
