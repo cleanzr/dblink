@@ -35,7 +35,7 @@ case class BufferedRDDWriter[T : ClassTag : Encoder](path: String,
 
   def append(rows: RDD[T]): BufferedRDDWriter[T] = {
     val writer = if (capacity - rdds.size == 0) this.flush() else this
-    rows.persist(StorageLevel.MEMORY_ONLY)
+    rows.persist(StorageLevel.MEMORY_AND_DISK)
     rows.count() // force evaluation
     val newRdds = writer.rdds :+ rows
     writer.copy(rdds = newRdds)
