@@ -1,5 +1,5 @@
-val sparkCore = "org.apache.spark" %% "spark-core" % "2.3.1" % "provided" withSources()
-val sparkSql = "org.apache.spark" %% "spark-sql" % "2.3.1" % "provided" withSources()
+val sparkCore = "org.apache.spark" %% "spark-core" % "2.4.5" % "provided" withSources()
+val sparkSql = "org.apache.spark" %% "spark-sql" % "2.4.5" % "provided" withSources()
 val commonsMath3 = "org.apache.commons" % "commons-math3" % "3.6.1"
 val log4j = "org.apache.logging.log4j" % "log4j-scala" % "11.0"
 val scalaTest = "org.scalatest" %% "scalatest" % "3.0.5" % "test"
@@ -21,16 +21,14 @@ ThisBuild / developers := List(
 
 ThisBuild / scmInfo := Some(
   ScmInfo(
-    url("https://github.com/ngmarchant/dblink"),
-    "scm:git@github.com:ngmarchant/dblink.git"
+    url("https://github.com/cleanzr/dblink"),
+    "scm:git@github.com:cleanzr/dblink.git"
   )
 )
 
 ThisBuild / description := "Distributed Bayesian Entity Resolution"
 ThisBuild / licenses := List("GPL-3" -> new URL("https://www.gnu.org/licenses/gpl-3.0.en.html"))
 ThisBuild / homepage := Some(url("https://github.com/cleanzr/dblink"))
-
-useGpg := true
 
 libraryDependencies ++= Seq(
   commonsMath3,
