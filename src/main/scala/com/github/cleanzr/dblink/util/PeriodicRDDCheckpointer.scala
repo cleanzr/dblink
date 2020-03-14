@@ -21,7 +21,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
-
 /**
   * This class helps with persisting and checkpointing RDDs.
   * Specifically, it automatically handles persisting and (optionally) checkpointing, as well as
@@ -83,7 +82,7 @@ class PeriodicRDDCheckpointer[T](checkpointInterval: Int,
 
   override protected def persist(data: RDD[T]): Unit = {
     if (data.getStorageLevel == StorageLevel.NONE) {
-      data.persist()
+      //data.persist(StorageLevel.MEMORY_ONLY)
     }
   }
 
