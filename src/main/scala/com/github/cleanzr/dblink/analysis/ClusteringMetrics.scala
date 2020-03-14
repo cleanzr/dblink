@@ -76,7 +76,7 @@ object ClusteringMetrics {
   def apply(predictedClusters: Dataset[Cluster],
             trueClusters: Dataset[Cluster]): ClusteringMetrics = {
     val contingencyTable = ClusteringContingencyTable(predictedClusters, trueClusters)
-    contingencyTable.persist(StorageLevel.MEMORY_ONLY_SER)
+    contingencyTable.persist(StorageLevel.MEMORY_ONLY)
     val adjRandIndex = AdjustedRandIndex(contingencyTable)
     contingencyTable.unpersist()
     ClusteringMetrics(adjRandIndex)

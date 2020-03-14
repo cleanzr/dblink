@@ -53,7 +53,7 @@ object ClusteringContingencyTable {
     // Ensure that clusterings partition the same set of elements (continue checking after join...)
     if (predictedSize != trueSize) throw new Exception("Clusterings do not partition the same set of elements.")
 
-    val joined = predictedMembership.rdd.join(trueMembership.rdd).persist(StorageLevel.MEMORY_ONLY_SER)
+    val joined = predictedMembership.rdd.join(trueMembership.rdd).persist()
     val joinedSize = joined.count()
 
     // Continued checking...
