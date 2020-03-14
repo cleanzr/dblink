@@ -52,15 +52,15 @@ case class BufferedRDDWriter[T : ClassTag : Encoder](path: String,
   def flush(): BufferedRDDWriter[T] = {
     if (rdds.isEmpty) return this
 
-    /** Combine RDDs in the buffer using a union operation */
+    // Combine RDDs in the buffer using a union operation
     val sc = rdds.head.sparkContext
     val unionedRdds = sc.union(rdds)
 
-    /** Write to disk. Note: overwrite if not appending and this is the first write to disk. */
+    // Write to disk. Note: overwrite if not appending and this is the first write to disk.
     write(unionedRdds, firstFlush && !append)
-    debug(s"Flushed to disk at ${path}")
+    debug(s"Flushed to disk at $path")
 
-    /** Unpersist RDDs in buffer as they're no longer required */
+    // Unpersist RDDs in buffer as they're no longer required
     rdds.foreach(_.unpersist(blocking = false))
 
     this.copy(rdds = Seq.empty[RDD[T]], firstFlush = false)

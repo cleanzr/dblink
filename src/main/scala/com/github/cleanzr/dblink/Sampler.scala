@@ -74,15 +74,15 @@ object Sampler extends Logging {
     implicit val sc: SparkContext = spark.sparkContext
     import spark.implicits._
 
-    /** Set-up writers */
+    // Set-up writers
     val linkagePath = outputPath + "linkage-chain.parquet"
     var linkageWriter = BufferedRDDWriter[LinkageState](writeBufferSize, linkagePath, continueChain)
     val diagnosticsPath = outputPath + "diagnostics.csv"
     val diagnosticsWriter = new DiagnosticsWriter(diagnosticsPath, continueChain)
-    val checkpointer = new PeriodicRDDCheckpointer[(PartitionId, EntRecPair)](checkpointInterval, sc)
+    val checkpointer = new PeriodicRDDCheckpointer[(PartitionId, EntRecCluster)](checkpointInterval, sc)
 
     if (!continueChain && burninInterval == 0) {
-      /** Need to record initial state */
+      // Need to record initial state
       checkpointer.update(state.partitions)
       linkageWriter = linkageWriter.append(state.getLinkageStructure())
       diagnosticsWriter.writeRow(state)
@@ -102,7 +102,7 @@ object Sampler extends Logging {
       }
 
       if (completedIterations >= burninInterval) {
-        /** Finished burn-in, so start writing samples to disk (accounting for thinning) */
+        // Finished burn-in, so start writing samples to disk (accounting for thinning)
         if ((completedIterations - burninInterval)%thinningInterval == 0) {
           linkageWriter = linkageWriter.append(state.getLinkageStructure())
           diagnosticsWriter.writeRow(state)
@@ -110,7 +110,7 @@ object Sampler extends Logging {
         }
       }
 
-      /** Ensure writer is kept alive (may die if burninInterval/thinningInterval is large) */
+      // Ensure writer is kept alive (may die if burninInterval/thinningInterval is large)
       diagnosticsWriter.progress()
     }
 

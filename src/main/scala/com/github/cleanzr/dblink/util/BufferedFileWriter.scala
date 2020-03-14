@@ -41,12 +41,12 @@ case class BufferedFileWriter(path: String,
     partsDir = new Path(path + "-PARTS")
     hdfs.mkdirs(partsDir) // dir for new and old parts
     hdfs.rename(file, new Path(partsDir.toString + Path.SEPARATOR + "PART0.csv")) // move old part into dir
-    hdfs.create(new Path(partsDir.toString + Path.SEPARATOR + "PART1.csv"), true, 4*1024, _progress)
+    hdfs.create(new Path(partsDir.toString + Path.SEPARATOR + "PART1.csv"), true, 1, _progress)
   } else {
-    hdfs.create(file, true, 4*1024, _progress)
+    hdfs.create(file, true, 1, _progress)
   }
 
-  private val writer = new BufferedWriter(new OutputStreamWriter(outStream, "UTF-8"))
+  private val writer = new OutputStreamWriter(outStream, "UTF-8")
 
   def close(): Unit = {
     writer.close()
@@ -61,9 +61,7 @@ case class BufferedFileWriter(path: String,
 
   def flush(): Unit = writer.flush()
 
-  def newLine(): Unit = writer.newLine()
-
-  def write(str: String): Unit = writer.write(str)
+  def write(str: String): Unit = writer.write(str, 0, str.length())
 
   def progress(): Unit = _progress.progress()
 }

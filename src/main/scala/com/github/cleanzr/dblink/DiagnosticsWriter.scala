@@ -47,18 +47,18 @@ class DiagnosticsWriter(path: String, continueChain: Boolean)
   def writeRow(state: State): Unit = {
     if (firstWrite && !continueChain) writeHeader(state); firstWrite = false
 
-    /** Get number of attributes */
+    // Get number of attributes
     val numAttributes = state.bcRecordsCache.value.numAttributes
 
-    /** Aggregate number of distortions for each attribute (sum over fileId) */
+    // Aggregate number of distortions for each attribute (sum over fileId)
     val aggAttrDistortions = state.summaryVars.aggDistortions
       .groupBy(_._1._1) // group by attrId
       .mapValues(_.values.sum) // sum over fileId
 
-    /** Convenience variable */
+    // Convenience variable
     val recDistortions = state.summaryVars.recDistortions
 
-    /** Build row of string values matching header*/
+    // Build row of string values matching header
     val row: Iterator[String] = Iterator(
         state.iteration.toString,                                                          // iteration
         System.currentTimeMillis().toString,                                               // systemTime-ms

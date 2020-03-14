@@ -75,14 +75,13 @@ object AliasSampler {
 
     val aliasTable = Array.ofDim[Int](size)
 
-    /** Store small and large worklists in a single array.
-      * "Small" elements are stored on the left side, and "large" elements are
-      * stored on the right side */
+    // Store small and large worklists in a single array. "Small" elements are stored on the left side, and
+    // "large" elements are stored on the right side.
     val worklist = Array.ofDim[Int](size)
     var posSmall = 0
     var posLarge = size
 
-    /** Fill worklists */
+    // Fill worklists
     var i = 0
     while(i < size) {
       if (probabilities(i) < 1.0) {
@@ -95,7 +94,7 @@ object AliasSampler {
       i += 1
     }
 
-    /** Remove elements from worklists */
+    // Remove elements from worklists
     if (posSmall > 0) { // both small and large worklists contain elements
       posSmall = 0
       while (posSmall < size && posLarge < size) {
@@ -108,7 +107,7 @@ object AliasSampler {
       }
     }
 
-    /** Since the uniform on [0,1] in the `sample` method is shifted by i */
+    // Since the uniform on [0,1] in the `sample` method is shifted by i
     i = 0
     while (i < size) {
       probabilities(i) += i

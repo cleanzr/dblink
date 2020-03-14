@@ -135,7 +135,7 @@ object LinkageChain extends Logging {
     *         and the value is a map from cluster sizes to their corresponding frequencies.
     */
   def clusterSizeDistribution(linkageChain: Dataset[LinkageState]): Dataset[(Long, mutable.Map[Int, Long])] = {
-    /** Compute distribution separately for each partition, then combine the results */
+    // Compute distribution separately for each partition, then combine the results
     val spark = linkageChain.sparkSession
     import spark.implicits._
 
@@ -167,19 +167,19 @@ object LinkageChain extends Logging {
 
     val distAlongChain = clusterSizeDistribution.collect().sortBy(_._1) // collect on driver and sort by iteration
 
-    /** Get the size of the largest cluster in the samples */
+    // Get the size of the largest cluster in the samples
     val maxClustSize = distAlongChain.aggregate(0)(
       seqop = (currentMax, x) => math.max(currentMax, x._2.keySet.max),
       combop = (a, b) => math.max(a, b)
     )
-    /** Output file can be created from Hadoop file system. */
+    // Output file can be created from Hadoop file system.
     val fullPath = path + "cluster-size-distribution.csv"
     info(s"Writing cluster size frequency distribution along the chain to $fullPath")
     val writer = BufferedFileWriter(fullPath, append = false, sc)
 
-    /** Write CSV header */
+    // Write CSV header
     writer.write("iteration" + "," + (0 to maxClustSize).mkString(",") + "\n")
-    /** Write rows (one for each iteration) */
+    // Write rows (one for each iteration)
     distAlongChain.foreach { case (iteration, kToCounts) =>
       val countsArray = (0 to maxClustSize).map(k => kToCounts.getOrElse(k, 0L))
       writer.write(iteration.toString + "," + countsArray.mkString(",") + "\n")
@@ -199,13 +199,13 @@ object LinkageChain extends Logging {
 
     val partIds = partSizesAlongChain.map(_._2.keySet).reduce(_ ++ _).toArray.sorted
 
-    /** Output file can be created from Hadoop file system. */
+    // Output file can be created from Hadoop file system.
     val fullPath = path + "partition-sizes.csv"
     val writer = BufferedFileWriter(fullPath, append = false, sc)
 
-    /** Write CSV header */
+    // Write CSV header
     writer.write("iteration" + "," + partIds.mkString(",") + "\n")
-    /** Write rows (one for each iteration) */
+    // Write rows (one for each iteration)
     partSizesAlongChain.foreach { case (iteration, m) =>
       val sizes = partIds.map(partId => m.getOrElse(partId, 0))
       writer.write(iteration.toString + "," + sizes.mkString(",") + "\n")
