@@ -24,7 +24,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -78,15 +77,15 @@ abstract class PeriodicCheckpointer[T](val checkpointInterval: Int,
     * @param newData  New Dataset created from previous Datasets in the lineage.
     */
   def update(newData: T): Unit = {
-    //persist(newData)
-    //persistedQueue.enqueue(newData)
+    persist(newData)
+    persistedQueue.enqueue(newData)
     // We try to maintain 2 Datasets in persistedQueue to support the semantics of this class:
     // Users should call [[update()]] when a new Dataset has been created,
     // before the Dataset has been materialized.
-    //while (persistedQueue.size > 3) {
-    //  val dataToUnpersist = persistedQueue.dequeue()
-    //  unpersist(dataToUnpersist)
-    //}
+    while (persistedQueue.size > 3) {
+      val dataToUnpersist = persistedQueue.dequeue()
+      unpersist(dataToUnpersist)
+    }
     updateCount += 1
 
     // Handle checkpointing (after persisting)
