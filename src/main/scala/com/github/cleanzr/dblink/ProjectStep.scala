@@ -134,19 +134,16 @@ object ProjectStep {
       project.savedLinkageChain(lowerIterationCutoff) match {
         case Some(chain) =>
           quantities.foreach {
-            case "cluster-size-distribution" => {
+            case "cluster-size-distribution" =>
               val clustSizeDist = clusterSizeDistribution(chain)
               saveClusterSizeDistribution(clustSizeDist, project.outputPath)
-            }
-            case "partition-sizes" => {
+            case "partition-sizes" =>
               val partSizes = partitionSizes(chain)
               savePartitionSizes(partSizes, project.outputPath)
-            }
-            case "shared-most-probable-clusters" => {
+            case "shared-most-probable-clusters" =>
               import analysis._
               val smpc = sharedMostProbableClusters(chain)
               smpc.saveCsv(project.outputPath + "shared-most-probable-clusters.csv")
-            }
           }
         case None => error("No linkage chain")
       }
