@@ -79,7 +79,7 @@ package object analysis {
     import spark.implicits._
     clusters.rdd
       .zipWithUniqueId()
-      .flatMap { case (recIds, entityId) => recIds.iterator.map(recId => (recId, entityId)) }
+      .flatMap { case (recIds, entityId) => recIds.iterator.map(recId => (recId, entityId.toInt)) }
       .toDS()
   }
 

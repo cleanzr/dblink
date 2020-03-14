@@ -21,7 +21,6 @@ package com.github.cleanzr.dblink
 
 import java.io.{ObjectInputStream, ObjectOutputStream}
 
-import com.github.cleanzr.dblink.partitioning.PartitionFunction
 import com.github.cleanzr.dblink.util.{HardPartitioner, PeriodicRDDCheckpointer}
 import com.github.cleanzr.dblink.GibbsUpdates.{updateDistProbs, updatePartitions, updateSummaryVariables}
 import com.github.cleanzr.dblink.partitioning.PartitionFunction
@@ -31,38 +30,38 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.{array, col}
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.storage.StorageLevel
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 /** State of the Markov chain
   *
-  * @param iteration iteration counter.
-  * @param partitions RDD containing Partition-Entity-Record triples
-  *                   and their associated parameters (entity attribute values,
-  *                   record distortion indicators and record attribute values).
-  * @param distProbs map containing the distortion probabilities for each
-  *                  fileId and attributeId.
-  * @param summaryVars collection of quantities that summarise the state. Each
-  *                    quantity is a function of `partitions` and `distProbs`.
-  * @param accumulators accumulators used for calculating `summaryVars`.
-  * @param partitioner used to repartition `partitions` after it is updated.
-  * @param randomSeed
-  * @param bcParameters
-  * @param bcPartitionFunction
-  * @param bcRecordsCache broadcast variable that contains objects required on each
-  *                node.
-  * @param rand random number generator used for updating the distortion
-  *             probabilities on the driver.
+  * @param iteration Iteration counter.
+  * @param partitions RDD containing Partition-Entity clusters and their associated parameters (entity
+  *                   attribute values, record distortion indicators and record attribute values).
+  * @param distProbs Map containing the distortion probabilities for each fileId and attributeId.
+  * @param summaryVars Collection of quantities that summarise the state. Each quantity is a function of `partitions`
+  *                    and `distProbs`.
+  * @param accumulators Accumulators used for calculating `summaryVars`.
+  * @param partitioner Partitioner used to repartition `partitions` after it is updated.
+  * @param startRandomSeed Starting random seed.
+  * @param currentRandomSeed Current random seed. To ensure unique pseudo-random numbers in a distributed setting,
+  *                          we increment the random seed by 1 when initializing the pseudo-RNG for each iteration
+  *                          and partition.
+  * @param bcParameters Other model parameters as a Spark broadcast variable.
+  * @param bcPartitionFunction Partition function as a Spark broadcast variable.
+  * @param bcRecordsCache Records cache (includes summary statistics and attribute-level parameters) as a Spark
+  *                       broadcast variable.
+  * @param rand Random number generator used for updating the distortion probabilities on the driver.
   */
 case class State(iteration: Long,
                  partitions: Partitions,
                  distProbs: DistortionProbs,
+                 populationSize: Int,
                  summaryVars: SummaryVars,
                  accumulators: SummaryAccumulators,
                  partitioner: HardPartitioner,
-                 randomSeed: Long,
+                 startRandomSeed: Long,
+                 currentRandomSeed: Long,
                  bcParameters: Broadcast[Parameters],
                  bcPartitionFunction: Broadcast[PartitionFunction[ValueId]],
                  bcRecordsCache: Broadcast[RecordsCache])
@@ -70,51 +69,45 @@ case class State(iteration: Long,
 
   /** Applies a Markov transition operator to the given state
     *
-    * @param checkpointer whether to checkpoint the RDD.
-    * @param collapsedEntityIds whether to do a partially-collapsed update for the entity ids (default: false)
-    * @param collapsedEntityValues whether to do a partially-collapsed update for the entity values (default: true)
-    * @param sequential
+    * @param checkpointer Whether to checkpoint the RDD.
+    * @param collapsedEntityIds Whether to do a partially-collapsed update for the entity ids (default: false)
+    * @param collapsedEntityValues Whether to do a partially-collapsed update for the entity values (default: true)
+    * @param sequential Whether to perform the update without using an inverted index.
     * @return new State after applying the transition operator.
     */
-  def nextState(checkpointer: PeriodicRDDCheckpointer[(PartitionId, EntRecPair)],
+  def nextState(checkpointer: PeriodicRDDCheckpointer[(PartitionId, EntRecCluster)],
                 collapsedEntityIds: Boolean = false,
                 collapsedEntityValues: Boolean = true,
                 sequential: Boolean = false): State = {
-    /** Update distortion probabilities and broadcast */
+    // Update distortion probabilities and broadcast
     val newDistProbs = updateDistProbs(summaryVars, bcRecordsCache.value)
     val bcDistProbs = partitions.sparkContext.broadcast(newDistProbs)
 
-    val newPartitions = updatePartitions(iteration, partitions, bcDistProbs,
-      partitioner, randomSeed, bcPartitionFunction, bcRecordsCache, collapsedEntityIds, collapsedEntityValues, sequential)
-    /** If handling persistence here, may want to set this:
-      * .persist(StorageLevel.MEMORY_ONLY_SER) */
-    checkpointer.update(newPartitions)
-    //if (checkpointer) newPartitions.checkpoint()
+    // Update parameters on the partitions and the population size
+    val (newPartitions, newRandomSeed) = updatePartitions(partitions,
+      populationSize, bcDistProbs, partitioner, currentRandomSeed, bcPartitionFunction, bcRecordsCache,
+      collapsedEntityIds, collapsedEntityValues, sequential)
 
-    val newSummaryVariables = updateSummaryVariables(newPartitions, accumulators,
-      bcDistProbs, bcRecordsCache)
-    bcDistProbs.destroy()
+    checkpointer.update(newPartitions)
+
+    // Compute summary statistics
+    val newSummaryVariables = updateSummaryVariables(newPartitions, accumulators, bcDistProbs.value, bcRecordsCache)
+    bcDistProbs.unpersist()
 
     this.copy(iteration = iteration + 1, partitions = newPartitions, distProbs = newDistProbs,
-      summaryVars = newSummaryVariables)
+      summaryVars = newSummaryVariables, currentRandomSeed = newRandomSeed)
   }
 
+  /** Get the linkage structure (i.e. a clustering of records according to their linked entities) */
   def getLinkageStructure(): RDD[LinkageState] = {
-    partitions.mapPartitions(partition => {
-      val entRecClusters = mutable.LongMap.empty[ArrayBuffer[RecordId]]
-      var partitionId = -1
-      partition.foreach { case (pId: Int, EntRecPair(entity, record)) =>
-        partitionId = pId
-        val cluster = entRecClusters.getOrElseUpdate(entity.id, ArrayBuffer.empty[RecordId])
-        if (record.isDefined) {
-          cluster += record.get.id
-        }
-      }
-      if (entRecClusters.isEmpty) {
-        Iterator()
-      } else {
-        Iterator(LinkageState(iteration, partitionId, entRecClusters.toMap))
-      }
+    partitions.aggregateByKey(zeroValue = Seq.empty[Seq[RecordId]])(
+      seqOp = (clusters, cluster) => cluster.records match {
+        case Some(r) => clusters :+ r.map(_.id).toSeq
+        case None => clusters
+      },
+      combOp = _ ++ _
+    ).mapPartitions(partition => {
+      partition.map { case (partitionId, clusters) => LinkageState(iteration, partitionId, clusters)}
     }, preservesPartitioning = true)
   }
 
@@ -137,9 +130,11 @@ case class State(iteration: Long,
 
     oos.writeLong(this.iteration)
     oos.writeObject(this.distProbs)
+    oos.writeObject(this.populationSize)
     oos.writeObject(this.summaryVars)
     oos.writeObject(this.partitioner)
-    oos.writeLong(this.randomSeed)
+    oos.writeLong(this.startRandomSeed)
+    oos.writeLong(this.currentRandomSeed)
     oos.writeObject(this.bcParameters.value)
     oos.writeObject(this.bcPartitionFunction.value)
     oos.writeObject(this.bcRecordsCache.value)
@@ -150,7 +145,7 @@ case class State(iteration: Long,
     val partitionsPath = path + "partitions-state.parquet"
     val spark = SparkSession.builder().getOrCreate()
     import spark.implicits._
-    partitions.map(r => PartEntRecTriple(r._1, r._2)).toDS() // convert to Dataset[PartEntRecTriple]
+    partitions.map(r => PartEntRecCluster(r._1, r._2)).toDS() // convert to Dataset[PartEntRecTriple]
       .write.format("parquet").mode("overwrite").save(partitionsPath)
   }
 }
@@ -174,9 +169,11 @@ object State {
 
     val iteration = ois.readLong()
     val distProbs = ois.readObject().asInstanceOf[DistortionProbs]
+    val populationSize = ois.readInt()
     val summaryVars = ois.readObject().asInstanceOf[SummaryVars]
     val partitioner = ois.readObject().asInstanceOf[HardPartitioner]
-    val randomSeed = ois.readLong()
+    val startRandomSeed = ois.readLong()
+    val currentRandomSeed = ois.readLong()
     val parameters = ois.readObject().asInstanceOf[Parameters]
     val partitionFunction = ois.readObject().asInstanceOf[PartitionFunction[ValueId]] // TODO: what if a partition function is a different class?
     val recordsCache = ois.readObject().asInstanceOf[RecordsCache]
@@ -184,15 +181,15 @@ object State {
 
     val partitionsPath = path + "partitions-state.parquet"
     val partitions = spark.read.format("parquet")
-      .load(partitionsPath).as[PartEntRecTriple].rdd
-      .map(r => (r.partitionId, r.entRecPair))
+      .load(partitionsPath).as[PartEntRecCluster].rdd
+      .map(r => (r.partitionId, r.entRecCluster))
     val bcParameters = sc.broadcast(parameters)
     val bcPartitionFunction = sc.broadcast(partitionFunction)
     val bcRecordsCache = sc.broadcast(recordsCache)
     val accumulators = SummaryAccumulators(sc)
 
-    State(iteration, partitions, distProbs, summaryVars, accumulators, partitioner, randomSeed,
-      bcParameters, bcPartitionFunction, bcRecordsCache)
+    State(iteration, partitions, distProbs, populationSize, summaryVars, accumulators, partitioner, startRandomSeed,
+      currentRandomSeed, bcParameters, bcPartitionFunction, bcRecordsCache)
   }
 
   /** Initialise a new State object based on a simple deterministic method.
@@ -207,6 +204,7 @@ object State {
     */
   def deterministic(records: RDD[Record[String]],
                     attributeSpecs: IndexedSeq[Attribute],
+                    populationSize: Option[Int],
                     parameters: Parameters,
                     partitionFunction: PartitionFunction[ValueId],
                     randomSeed: Long): State = {
@@ -218,30 +216,35 @@ object State {
     val bcRecordsCache = sc.broadcast(recordsCache)
     val bcParameters = sc.broadcast(parameters)
 
+    val numRecsPartition = records.mapPartitionsWithIndex( (index, partition) => Array((index, partition.size)).iterator).collectAsMap()
+
+    val popSize = populationSize.getOrElse(numRecsPartition.values.sum)
+
+    assert(popSize >= numRecsPartition.size, "Too few entities. Need at least one entity per partition")
+
     /** Divide the entities among the partitions using a heuristic bin-packing method
       *
       * Starting point: set the number of entities equal to the number of records in the partition.
       * Then, iteratively refine by adding/subtracting entities from partitions until the target number is reached.
       */
-    val numRecsPartition = records.mapPartitions(x => Array(x.size).iterator).collect()
-    assert(parameters.populationSize > numRecsPartition.size, "Too few entities. Need at least one entity per partition")
     val numEntsPartition = {
-      var numAdditionalEnts = parameters.populationSize - recordsCache.numRecords
-      val temp = numRecsPartition.clone()
-      var i = 0
+      var numAdditionalEnts = popSize - recordsCache.numRecords
+      val temp = mutable.Map(numRecsPartition.toSeq: _*)
+
+      var it = temp.keys.toIterator
       while (numAdditionalEnts != 0) {
-        if (i >= temp.length) i = 0 // reset iterator if we reach the end
+        if (!it.hasNext) it = temp.keys.toIterator // reset iterator if we reach the end
+        val key = it.next()
         if (numAdditionalEnts > 0) {
-          temp(i) += 1
+          temp(key) += 1
           numAdditionalEnts -= 1
         } else {
           // try to subtract from current
-          if (temp(i) > 1) {
-            temp(i) -= 1
+          if (temp(key) > 1) {
+            temp(key) -= 1
             numAdditionalEnts += 1
           }
         }
-        i += 1
       }
       temp
     }
@@ -251,63 +254,67 @@ object State {
       * - distortion: prefer no distortion
       * - entity values: copied directly from the records (missing generated randomly)
       */
-    val entRecPairs = recordsCache.transformRecords(records) // map string attribute values to integer ids
-      .mapPartitionsWithIndex((partId, partition) => {       // generate latent variables
+    val entRecClusters = recordsCache.transformRecords(records) // map string attribute values to integer ids
+      .mapPartitionsWithIndex((index, partition) => {       // generate latent variables
         /** Ensure we get different pseudo-random numbers on each partition */
-        implicit val rand: RandomGenerator = new MersenneTwister((partId + randomSeed).longValue())
+        val seed = index + randomSeed
+        implicit val rand: RandomGenerator = new MersenneTwister(seed.longValue())
 
         /** Convenience variable */
         val indexedAttributes = bcRecordsCache.value.indexedAttributes
 
-        val numEntities = numEntsPartition(partId) // number of entities in this partition
-        val firstEntId = numEntsPartition.take(partId).sum // ensures unique entity ids across all partitions
+        val numEntities = numEntsPartition(index) // number of entities in this partition
+        val result = mutable.Map.empty[EntityId, EntRecCluster]
 
-        /** Convert from an iterator to an array, as we need support for indexing */
-        val records = partition.toArray
-
-        val recordsIt = records.zipWithIndex.iterator.map { case (Record(id, fileId, values), i) =>
+        partition.zipWithIndex.foreach { case (Record(id, fileId, recValues), i) =>
           /** Initialize entity values using record values. Prefer to use linked record values, but allow for
             * the case where numEntities < numRecords by taking the modulus */
-          val linkRecId = i % numEntities
-          val entId = firstEntId + linkRecId
-          val pickedRecValues = records(linkRecId).values
-          /** Replace any missing values by randomly-generated values */
-          val entValues = (pickedRecValues, indexedAttributes).zipped.map {
-            case (valueId, _) if valueId >= 0 => valueId
-            case (_, IndexedAttribute(_, _, _, index)) =>  index.draw()
-          }
+          val entId = i % numEntities
+
+          val thisClust = result.getOrElse(entId, {
+            /** Replace any missing values by randomly-generated values */
+            val entValues = (recValues, indexedAttributes).zipped.map {
+              case (valueId, _) if valueId >= 0 => valueId
+              case (_, IndexedAttribute(_, _, _, index)) => index.draw()
+            }
+            EntRecCluster(Entity(entValues), None)
+          })
+
           /** Initialize the distortion indicators. Prefer no distortion unless values disagree */
-          val distValues = (values, entValues).zipped.map {
-            case (recValue, entValue) => DistortedValue(recValue, distorted = recValue != entValue)
+          val distValues = (recValues, thisClust.entity.values).zipped.map {
+            case (recValue, entValue) => DistortedValue(recValue, distorted = (recValue >= 0) & (recValue != entValue))
           }
-          val entity = Entity(entId, entValues)
           val newRecord = Record[DistortedValue](id, fileId, distValues)
-          EntRecPair(entity, Some(newRecord))
+
+          thisClust match {
+            case EntRecCluster(_, Some(r)) => result.update(entId, thisClust.copy(records = Some(r :+ newRecord)))
+            case EntRecCluster(_, None) => result.update(entId, thisClust.copy(records = Some(Array(newRecord))))
+          }
         }
 
         /** Deal with the case numEntities > numRecords, where there are isolated entities */
-        val numIsolates = if (numEntities > records.length) numEntities - records.length else 0
-        val isolatesIt = Iterator.tabulate(numIsolates) { i =>
-          val entId = firstEntId + records.size + i
+        val numIsolates = numEntities - result.size
+        val isolatesIt = Iterator.tabulate(numIsolates) { _ =>
           val entValues = indexedAttributes.toArray.map { case IndexedAttribute(_, _, _, index) => index.draw() }
-          val entity = Entity(entId, entValues)
-          EntRecPair(entity, None)
+          val entity = Entity(entValues)
+          EntRecCluster(entity, None)
         }
 
-        recordsIt ++ isolatesIt
-      }, true)
-    entRecPairs.persist(StorageLevel.MEMORY_AND_DISK_SER)
+        result.valuesIterator ++ isolatesIt
+      }, preservesPartitioning = true)
+    entRecClusters.persist()
+    val newRandomSeed = randomSeed + entRecClusters.getNumPartitions
 
     /** Initialize partitioner */
-    val entityValues = entRecPairs.map(_.entity.values)
+    val entityValues = entRecClusters.map(_.entity.values)
     partitionFunction.fit(entityValues)
     val partitioner = new HardPartitioner(partitionFunction.numPartitions)
     val bcPartitionFunction = sc.broadcast(partitionFunction)
 
     /** Apply partitioner to entity-record pairs */
-    val partitions = entRecPairs.keyBy(pair => bcPartitionFunction.value.getPartitionId(pair.entity.values))
+    val partitions = entRecClusters.keyBy(cluster => bcPartitionFunction.value.getPartitionId(cluster.entity.values))
       .partitionBy(partitioner)
-    entRecPairs.unpersist()
+    entRecClusters.unpersist()
 
     /** Initialize the distortion probabilities (based on the prior hyperparameters) */
     val distProbs = DistortionProbs(recordsCache.fileSizes.keys, recordsCache.distortionPrior)
@@ -315,16 +322,15 @@ object State {
 
     /** Initialize accumulators and use them to update the summary variables */
     val accumulators = SummaryAccumulators(sc)
-    val summaryVars = updateSummaryVariables(partitions, accumulators, bcDistProbs,
-      bcRecordsCache)
-    bcDistProbs.destroy()
+    val summaryVars = updateSummaryVariables(partitions, accumulators, bcDistProbs.value, bcRecordsCache)
+    bcDistProbs.unpersist()
 
     /** Initialize random number generator for the distortion probabilities */
     implicit val rand: RandomGenerator = new MersenneTwister()
     rand.setSeed(randomSeed.longValue())
 
-    State(0l, partitions, distProbs, summaryVars, accumulators, partitioner, randomSeed,
-      bcParameters, bcPartitionFunction, bcRecordsCache)
+    State(0L, partitions, distProbs, popSize, summaryVars, accumulators, partitioner, randomSeed,
+      newRandomSeed, bcParameters, bcPartitionFunction, bcRecordsCache)
   }
 
   /** Initialise a new State object based on a simple deterministic method.
@@ -343,6 +349,7 @@ object State {
                     recIdColname: String,
                     fileIdColname: Option[String],
                     attributeSpecs: IndexedSeq[Attribute],
+                    populationSize: Option[Int],
                     parameters: Parameters,
                     partitionFunction: PartitionFunction[ValueId],
                     randomSeed: Long): State = {
@@ -366,6 +373,6 @@ object State {
           Record(r.getString(0), "0", r.getSeq[String](1).toArray)
         ).rdd
     }
-    deterministic(rdd, attributeSpecs, parameters, partitionFunction, randomSeed)
+    deterministic(rdd, attributeSpecs, populationSize, parameters, partitionFunction, randomSeed)
   }
 }

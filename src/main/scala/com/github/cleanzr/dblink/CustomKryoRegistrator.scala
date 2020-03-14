@@ -31,8 +31,8 @@ import org.apache.spark.serializer.KryoRegistrator
 
 class CustomKryoRegistrator extends KryoRegistrator {
   override def registerClasses(kryo: Kryo): Unit = {
-    kryo.register(classOf[EntRecPair])
-    kryo.register(classOf[PartEntRecTriple])
+    kryo.register(classOf[EntRecCluster])
+    kryo.register(classOf[PartEntRecCluster])
     kryo.register(classOf[Record[_]])
     kryo.register(classOf[Entity])
     kryo.register(classOf[DistortedValue])
@@ -59,7 +59,7 @@ class CustomKryoRegistrator extends KryoRegistrator {
     kryo.register(Class.forName("org.apache.spark.sql.catalyst.expressions.GenericInternalRow"))
     kryo.register(Class.forName("org.apache.spark.unsafe.types.UTF8String"))
     kryo.register(classOf[Array[Object]])
-    kryo.register(classOf[Array[EntRecPair]])
+    kryo.register(classOf[Array[EntRecCluster]])
     kryo.register(classOf[RecordsCache])
     kryo.register(classOf[Parameters])
     kryo.register(classOf[AliasSampler])

@@ -55,7 +55,7 @@ object LinkageChain extends Logging {
 
     val numSamples = linkageChain.map(_.iteration).distinct().count()
     linkageChain.rdd
-      .flatMap(_.linkageStructure.iterator.collect {case (_, recIds) if recIds.nonEmpty => (recIds.toSet, 1.0/numSamples)})
+      .flatMap(_.linkageStructure.iterator.collect {case cluster if cluster.nonEmpty => (cluster.toSet, 1.0/numSamples)})
       .reduceByKey(_ + _)
       .flatMap {case (recIds, freq) => recIds.iterator.map(recId => (recId, (recIds, freq)))}
       .reduceByKey((x, y) => if (x._2 >= y._2) x else y)
@@ -119,7 +119,7 @@ object LinkageChain extends Logging {
     val spark = linkageChain.sparkSession
     import spark.implicits._
     linkageChain.rdd
-      .map(x => (x.iteration, (x.partitionId, x.linkageStructure.keySet.size)))
+      .map(x => (x.iteration, (x.partitionId, x.linkageStructure.size)))
       .aggregateByKey(Map.empty[PartitionId, Int])(
         seqOp = (m, v) => m + v,
         combOp = (m1, m2) => m1 ++ m2
@@ -142,10 +142,7 @@ object LinkageChain extends Logging {
     linkageChain.rdd
       .map(x => {
         val clustSizes = mutable.Map[Int, Long]().withDefaultValue(0L)
-        x.linkageStructure.foreach { case (_, recIds) =>
-          val k = recIds.size
-          clustSizes(k) += 1L
-        }
+        x.linkageStructure.foreach { cluster => clustSizes(cluster.size) += 1L }
         (x.iteration, clustSizes)
       })
       .reduceByKey((a, b) => {

@@ -25,8 +25,6 @@ import partitioning.{KDTreePartitioner, PartitionFunction}
 import com.typesafe.config.{Config, ConfigException, ConfigObject}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.functions.{array, col}
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
 import scala.collection.JavaConverters._
@@ -51,7 +49,7 @@ import scala.util.Try
 case class Project(dataPath: String, outputPath: String, checkpointPath: String,
                    recIdAttribute: String, fileIdAttribute: Option[String],
                    entIdAttribute: Option[String], matchingAttributes: IndexedSeq[Attribute],
-                   partitionFunction: PartitionFunction[ValueId], randomSeed: Long, populationSize: Option[Long],
+                   partitionFunction: PartitionFunction[ValueId], randomSeed: Long, populationSize: Option[Int],
                    expectedMaxClusterSize: Int, dataFrame: DataFrame) extends Logging {
   require(expectedMaxClusterSize >= 0, "expectedMaxClusterSize must be non-negative")
 
@@ -79,7 +77,7 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
     lines ++= matchingAttributes.zipWithIndex.map { case (attribute, attributeId) =>
       s"  * '${attribute.name}' (id=$attributeId) with ${attribute.similarityFn.mkString} and ${attribute.distortionPrior.mkString}"
     }
-    lines += s"  * Size of latent population is ${populationSize.getOrElse(dataFrame.count())}"
+    lines += s"  * Size of latent population is ${populationSize.toString}"
     lines += ""
 
     lines += "Partition function settings"
@@ -132,13 +130,13 @@ case class Project(dataPath: String, outputPath: String, checkpointPath: String,
   def generateInitialState: State = {
     info("Generating new initial state")
     val parameters = Parameters(
-      populationSize = populationSize.getOrElse(dataFrame.count()),
       maxClusterSize = expectedMaxClusterSize
     )
     State.deterministic(
       records = dataFrame,
       recIdColname = recIdAttribute,
       fileIdColname = fileIdAttribute,
+      populationSize = populationSize,
       attributeSpecs = matchingAttributes,
       parameters = parameters,
       partitionFunction = partitionFunction,
@@ -194,7 +192,7 @@ object Project {
       matchingAttributes = matchingAttributes,
       partitionFunction = parsePartitioner(config.getConfig("dblink.partitioner"), matchingAttributes.map(_.name)),
       randomSeed = config.getLong("dblink.randomSeed"),
-      populationSize = Try {Some(config.getLong("dblink.populationSize"))} getOrElse None,
+      populationSize = Try {Some(config.getInt("dblink.populationSize"))} getOrElse None,
       expectedMaxClusterSize = Try {config.getInt("dblink.expectedMaxClusterSize")} getOrElse 10,
       dataFrame = dataFrame
     )

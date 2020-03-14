@@ -19,13 +19,10 @@
 
 package com.github.cleanzr.dblink
 
-case class Parameters(populationSize: Long,
-                      maxClusterSize: Int) {
-  require(populationSize > 0, "`populationSize` must be a positive integer.")
+case class Parameters(maxClusterSize: Int) {
   require(maxClusterSize > 0, "`maxClusterSize` must be a positive integer.")
 
   def mkString: String = {
-    "populationSize: " + populationSize + "\n" +
     "maxClusterSize: " + maxClusterSize
   }
 }

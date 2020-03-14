@@ -20,12 +20,9 @@
 
 package com.github.cleanzr.dblink
 
-import com.github.cleanzr.dblink.partitioning.PartitionFunction
-import com.github.cleanzr.dblink.random.DiscreteDist
 import com.github.cleanzr.dblink.util.HardPartitioner
 import com.github.cleanzr.dblink.random.DiscreteDist
 import com.github.cleanzr.dblink.partitioning.PartitionFunction
-import com.github.cleanzr.dblink.util._
 import org.apache.commons.math3.distribution.BetaDistribution
 import org.apache.commons.math3.random.{MersenneTwister, RandomGenerator}
 import org.apache.spark.broadcast.Broadcast
@@ -37,16 +34,15 @@ import scala.math.log
 object GibbsUpdates {
 
   /** Lightweight inverted index for the entity attribute values.
-    * Only supports insertion and querying.
-    * Updating is not required since the index is rebuilt from scratch at the
+    *
+    * Only supports insertion and querying. Updating is not required since the index is rebuilt from scratch at the
     * beginning of each iteration.
     */
   class EntityInvertedIndex extends Serializable {
     private val attrValueToEntIds =
       mutable.HashMap.empty[(AttributeId, ValueId), mutable.Set[EntityId]]
     
-    /** Method to add a single (attribute value -> entId) combination to
-      * the index */
+    /** Method to add a single (attribute value -> entId) combination to the index */
     private def add_attribute(attrId: AttributeId, valueId: ValueId,
                               entId: EntityId): Unit = {
       attrValueToEntIds.get((attrId, valueId)) match {
@@ -55,20 +51,24 @@ object GibbsUpdates {
       }
     }
     
-    /** Add entity to the inverted index */
-    def add(entity: Entity): Unit = {
+    /** Add an entity to the inverted index
+      *
+      * @param entId unique id for the entity (only needs to be unique within the partition)
+      * @param entity entity attribute values
+      */
+    def add(entId: EntityId, entity: Entity): Unit = {
       var attrId = 0
       while (attrId < entity.values.length) {
-        this.add_attribute(attrId, entity.values(attrId), entity.id)
+        this.add_attribute(attrId, entity.values(attrId), entId)
         attrId += 1
       }
     }
 
-    /** Get matching entities
+    /** Query entities which match on an attribute value
       * 
       * @param attrId query attribute id
       * @param valueId query value id (corresponding to the attribute id)
-      * @return the set of entity ids that match the queried attribute value
+      * @return set of entity ids that match the queried attribute value
       */
     def getEntityIds(attrId: AttributeId, valueId: ValueId): scala.collection.Set[EntityId] = {
       attrValueToEntIds.getOrElse((attrId, valueId), mutable.Set.empty[EntityId])
@@ -77,147 +77,137 @@ object GibbsUpdates {
 
 
 
-  /** An index from entity ids to row ids
+  /** An index from entity ids to record array ids
+    *
     * Rows corresponding to isolated entities (i.e. not records) are omitted
     */
-  class LinksIndex(allEntityIds: Iterator[EntityId],
-                   numRows: Int) extends Serializable {
-    private val entIdToRowIds =
-      allEntityIds.foldLeft(mutable.LongMap.empty[mutable.ArrayBuffer[Int]]) {
-        (m, entId) => m += (entId -> mutable.ArrayBuffer.empty[Int])
-      }
+  class LinksIndex(numEntities: Int, numRecords: Int) extends Serializable {
+    private val entIdToRecIds = Array.fill(numEntities)(ArrayBuffer.empty[Int])
 
-    private val rowIdToEntId = Array.fill[EntityId](numRows)(-1L)
+    private val recIdToEntId = Array.fill[EntityId](numRecords)(-1)
 
-    // IMPORTANT: only add (entId, rowId) pairs that correspond to records
-    // Must filter out isolated entities
-    def addLink(entId: EntityId, rowId: Int): Unit = {
-      rowIdToEntId(rowId) = entId
-      entIdToRowIds(entId) += rowId
+    /** Add a link between an entity and a record
+      *
+      * @param entId id for the entity (at the partition-level)
+      * @param recId id of the record (at the partition-level)
+      */
+    def addLink(entId: EntityId, recId: Int): Unit = {
+      recIdToEntId(recId) = entId
+      entIdToRecIds(entId) += recId
       // TODO: handle gracefully if entId doesn't exist in the map
       // (but something's wrong if it isn't there)
     }
 
-    def toIterator: Iterator[(EntityId, Traversable[Int])] = entIdToRowIds.toIterator
-
-    def isolatedEntityIds: Iterator[EntityId] = {
-      entIdToRowIds.iterator.collect {case (entId, rowIds) if rowIds.isEmpty => entId}
+    /** Get ids of entitys which are non-isolated (i.e. are linked to records) */
+    def nonIsolatedEntityIds: Iterator[EntityId] = {
+      entIdToRecIds.iterator.zipWithIndex.collect {case (recIds, entId) if recIds.nonEmpty => entId}
     }
 
-    def getLinkedRows(entId: EntityId): Traversable[Int] = {
-      entIdToRowIds.apply(entId)
-      // TODO: handle gracefully if entId doesn't exist in the map
-      // (but something's wrong if it isn't there)
-    }
+    /** Get ids of records that are linked to a particular entity
+      *
+      * @param entId id for the entity (at the partition-level)
+      * @return linked record ids (at the partition-level)
+      */
+    def getLinkedRows(entId: EntityId): Traversable[Int] = entIdToRecIds(entId)
 
-    def getLinkedEntity(rowId: Int): EntityId = rowIdToEntId(rowId)
+    /** Get linked entity id for a particular record
+      *
+      * @param recId id of the record (at the partition-level)
+      * @return id of linked entity (at the partition-level)
+      */
+    def getLinkedEntity(recId: Int): EntityId = recIdToEntId(recId)
   }
 
 
 
   /** Updates all partitions */
-  def updatePartitions(iteration: Long,
-                       partitions: Partitions,
+  def updatePartitions(partitions: Partitions,
+                       populationSize: Int,
                        bcDistProbs: Broadcast[DistortionProbs],
                        partitioner: HardPartitioner,
-                       randomSeed: Long,
+                       currentRandomSeed: Long,
                        bcPartitionFunction: Broadcast[PartitionFunction[ValueId]],
                        bcRecordsCache: Broadcast[RecordsCache],
                        collapsedEntityId: Boolean,
                        collapsedEntityValues: Boolean,
-                       sequential: Boolean): Partitions = {
-    partitions.mapPartitionsWithIndex { (index, partition) =>
-      /** Convenience variables */
-      val recordsCache = bcRecordsCache.value
+                       sequential: Boolean): (Partitions, Long) = {
 
-      /** Ensure we get different pseudo-random numbers on each partition and
-        * for each iteration */
-      val newSeed = iteration + index + randomSeed + 1L
+    // Step 1: Update the linkage structure, entity values and distortion indicators. The isolated entities are
+    // updated in this step if the the population size is fixed.
+    val step1 = partitions.mapPartitionsWithIndex((index, partition) => {
+      // Ensure we get different pseudo-random numbers on each partition and for each iteration
+      val newSeed = index + currentRandomSeed
       implicit val rand: RandomGenerator = new MersenneTwister(newSeed.longValue())
 
-      updatePartition(partition, bcDistProbs.value, bcPartitionFunction.value, recordsCache, collapsedEntityId, collapsedEntityValues, sequential)
-    }.partitionBy(partitioner) // Move entity clusters to newly-assigned partitions
-     //.persist(StorageLevel.MEMORY_ONLY_SER)
+      updatePartition(partition, bcDistProbs.value, bcPartitionFunction.value, bcRecordsCache.value, collapsedEntityId,
+        collapsedEntityValues, sequential)
+    }).partitionBy(partitioner)
+
+    // Increment the random seed by 1 for each partition, per mapPartitions operation
+    val newRandomSeed = currentRandomSeed + partitioner.numPartitions
+
+    // Step 3: Move entity clusters to newly-assigned partitions
+    val step2 = step1.partitionBy(partitioner)
+
+    (step2, newRandomSeed)
   }
 
-
   /** Updates a single partition */
-  def updatePartition(itPartition: Iterator[(PartitionId, EntRecPair)],
+  def updatePartition(itPartition: Iterator[(PartitionId, EntRecCluster)],
                       distProbs: DistortionProbs,
                       partitionFunction: PartitionFunction[ValueId],
                       recordsCache: RecordsCache,
                       collapsedEntityId: Boolean,
                       collapsedEntityValues: Boolean,
                       sequential: Boolean)
-                     (implicit rand: RandomGenerator): Iterator[(PartitionId, EntRecPair)] = {
-    /** Convenience variables */
+                     (implicit rand: RandomGenerator): Iterator[(PartitionId, EntRecCluster)] = {
+    // Convenience variables
     val indexedAttributes = recordsCache.indexedAttributes
 
-    /** Read data from `itPartition` into memory.
-      *
-      * Put record-related data into an ArrayBuffer
-      * Put entity-related data into an index that supports queries:
-      *   attribute value -> entIds and entId -> attribute values
-      */
-    val bRecords = ArrayBuffer.empty[Record[DistortedValue]]
-    val entities = mutable.LongMap.empty[Entity]
-    val entityInvertedIndex = new EntityInvertedIndex
-    if (!sequential) {
-      itPartition.foreach { case (_, EntRecPair(entity, record)) =>
-        if (record.isDefined) bRecords += record.get
-        entities.put(entity.id, entity) match {
-          case Some(_) =>
-          // Already seen this entity before. Nothing to do.
-          case None =>
-            // Haven't seen this entity before. Add it to the inverted index
-            entityInvertedIndex.add(entity)
-        }
-      }
-    } else {
-      /** Inverted index for the entities is not required */
-      itPartition.foreach { case (_, EntRecPair(entity, record)) =>
-        if (record.isDefined) bRecords += record.get
-        entities.update(entity.id, entity)
-      }
-    }
-    val records = bRecords.toArray
+    /*
+    Read data from iterator into memory
 
-    /** Update the links from records to entities
-      *
-      * Build an index that supports queries:
-      *   entId -> corresponding row ids in `records` ArrayBuffer
-      */
-    val linksIndex = new LinksIndex(entities.keysIterator, records.length)
+    Record-related data goes into an ArrayBuffer (need fast random access)
+    Entity-related data goes into forward/reverse indices to supports queries:
+      attribute value -> entIds with that value, and
+      entId -> entity's attribute values
+    */
+    val records = ArrayBuffer.empty[Record[DistortedValue]]
+    val entityInvertedIndex = new EntityInvertedIndex
+
+    val entities = itPartition.zipWithIndex.map { case ((_, EntRecCluster(ent, recs)), entId) =>
+      if (recs.isDefined) records ++= recs.get
+      if (!sequential) {
+        entityInvertedIndex.add(entId, ent)
+      }
+      ent
+    }.toArray
+
+    /*
+    Update the links from records to entities
+
+    Build an index that supports queries:
+      entId -> corresponding row ids in `records` ArrayBuffer
+    */
+    val linksIndex = new LinksIndex(entities.length, records.length)
     records.iterator.zipWithIndex.foreach { case (record, rowId) =>
-      val entId = if (sequential) updateEntityIdSeq(records(rowId), entities, recordsCache)
-      else if (collapsedEntityId) updateEntityIdCollapsed(records(rowId), entities, entityInvertedIndex, recordsCache, distProbs)
-      else updateEntityId(records(rowId), entities, entityInvertedIndex, recordsCache)
+      val entId = if (sequential) updateEntityIdSeq(record, entities, recordsCache)
+      else if (collapsedEntityId) updateEntityIdCollapsed(record, entities, entityInvertedIndex, recordsCache, distProbs)
+      else updateEntityId(record, entities, entityInvertedIndex, recordsCache)
       linksIndex.addLink(entId, rowId)
     }
 
-    /** Update entity attribute values and store in a map (entId -> Entity) */
-    val newEntities = updateEntityValues(records, linksIndex, distProbs, recordsCache, collapsedEntityValues, sequential)
+    // Update entity attribute values in-place
+    updateEntityValues(records, entities, linksIndex, distProbs, recordsCache, collapsedEntityValues, sequential)
 
-    /** Build output iterator over entity-record pairs (separately for the
-      * entity-record pairs and isolated entities) */
-
-    /** Records: insert updated entity attribute values and partitionIds, and update distortions */
-    val itRecords = records.iterator.zipWithIndex.map { case (record, rowId) =>
-      val entId = linksIndex.getLinkedEntity(rowId)
-      val entity = newEntities(entId)
-      val newPartitionId = partitionFunction.getPartitionId(entity.values) // TODO: delegate to allEntityValues
-      val newRecord = updateDistortions(entity, record, distProbs, indexedAttributes)
-      (newPartitionId, EntRecPair(entity, Some(newRecord)))
+    // Return an iterator over the updated clusters, while updating the partition assignments and update distortion
+    // indicators
+    entities.iterator.zipWithIndex.map { case (entity, entId) =>
+      val newPartitionId = partitionFunction.getPartitionId(entity.values)
+      val linkedRecords = linksIndex.getLinkedRows(entId)
+        .map(recId => updateDistortions(entity, records(recId), distProbs, indexedAttributes)).toArray
+      (newPartitionId, EntRecCluster(entity, if (linkedRecords.isEmpty) None else Some(linkedRecords)))
     }
-
-    /** Isolated entities: insert updated entity attribute values and partitionIds */
-    val itIsolatedEntities = linksIndex.isolatedEntityIds.map { entId =>
-      val entity = newEntities(entId)
-      val newPartitionId = partitionFunction.getPartitionId(entity.values) // TODO: delegate to allEntityValues
-      (newPartitionId, EntRecPair(entity, None))
-    }
-
-    itRecords ++ itIsolatedEntities
   }
 
 
@@ -228,78 +218,71 @@ object GibbsUpdates {
     */
   def updateSummaryVariables(partitions: Partitions,
                              accumulators: SummaryAccumulators,
-                             bcDistProbs: Broadcast[DistortionProbs],
+                             distProbs: DistortionProbs,
                              bcRecordsCache: Broadcast[RecordsCache]): SummaryVars = {
     accumulators.reset()
 
     partitions.foreachPartition { partition =>
-      /** Convenience variables */
+      // Convenience variables
       val indexedAttributes = bcRecordsCache.value.indexedAttributes
 
-      val seenEntities = mutable.HashSet.empty[EntityId]
-
       partition.foreach {
-        case (_, EntRecPair(entity, Some(record))) =>
-          /** Row is an entity-record pair */
+        case (_, EntRecCluster(entity, Some(records))) =>
+          // Entity cluster is non-isolated (contains linked some records)
 
-          /** Keep track of whether the entity id for the current pair has been seen before */
-          val thisEntityUnseen = seenEntities.add(entity.id)
-          /** Count number of distorted attributes for this record */
-          var recDistortion = 0
-
-          record.values.iterator.zipWithIndex.foreach { case (DistortedValue(recValue, distorted), attrId) =>
-            if (distorted) {
-              recDistortion += 1
-              accumulators.aggDistortions.add(((attrId, record.fileId), 1L))
-              val attribute = indexedAttributes(attrId)
-              val prob = if (recValue >= 0) {
-                if (attribute.isConstant) {
-                  attribute.index.probabilityOf(recValue)
-                } else {
-                  val entValue = entity.values(attrId)
-                  attribute.index.probabilityOf(recValue) *
-                    attribute.index.simNormalizationOf(entValue) *
-                    attribute.index.expSimOf(recValue, entValue)
-                }
-              } else 1.0
-              accumulators.logLikelihood.add(log(prob))
-            }
-            if (thisEntityUnseen) {
-              val entValue = entity.values(attrId)
-              val prob = indexedAttributes(attrId).index.probabilityOf(entValue)
-              accumulators.logLikelihood.add(log(prob))
-            }
-            /** NOTE: assume we don't enter a state where the distortion indicator is false
-              * and the attributes disagree. Then the likelihood would be zero.
-              */
+          // Contribution from the entity attribute values
+          (entity.values, indexedAttributes).zipped.foreach { case (entValue, attribute) =>
+            val prob = attribute.index.probabilityOf(entValue)
+            accumulators.logLikelihood.add(log(prob))
           }
-          accumulators.recDistortions.add((recDistortion, 1L))
-        case (_, EntRecPair(entity, None)) =>
-          /** Row is an isolated entity (not linked to any records) */
+
+          // Contribution from the linked records
+          records.foreach { record =>
+            // Count number of distorted attributes for this record
+            var recDistortion = 0
+            record.values.iterator.zipWithIndex.foreach { case (DistortedValue(recValue, distorted), attrId) =>
+              if (distorted) {
+                recDistortion += 1
+                accumulators.aggDistortions.add(((attrId, record.fileId), 1L))
+                val attribute = indexedAttributes(attrId)
+                val prob = if (recValue >= 0) {
+                  if (attribute.isConstant) {
+                    attribute.index.probabilityOf(recValue)
+                  } else {
+                    val entValue = entity.values(attrId)
+                    attribute.index.probabilityOf(recValue) *
+                      attribute.index.simNormalizationOf(entValue) *
+                      attribute.index.expSimOf(recValue, entValue)
+                  }
+                } else 1.0
+                accumulators.logLikelihood.add(log(prob))
+              }
+
+
+              // NOTE: assume we don't enter a state where the distortion indicator is false and the attributes
+              // disagree. Then the likelihood would be zero.
+            }
+            accumulators.recDistortions.add((recDistortion, 1L))
+          }
+        case (_, EntRecCluster(entity, None)) =>
+          // Entity is isolated (not linked to any records)
           accumulators.numIsolates.add(1L)
 
-          /** Keep track of whether the entity id for the current pair has been seen before */
-          val thisEntityUnseen = seenEntities.add(entity.id)
-
-          if (thisEntityUnseen) {
-            (entity.values, indexedAttributes).zipped.foreach { case (entValue, attribute) =>
-              val prob = attribute.index.probabilityOf(entValue)
-              accumulators.logLikelihood.add(log(prob))
-            }
+          (entity.values, indexedAttributes).zipped.foreach { case (entValue, attribute) =>
+            val prob = attribute.index.probabilityOf(entValue)
+            accumulators.logLikelihood.add(log(prob))
           }
       }
     }
 
-    /** Convenience variables */
-    val distProbs = bcDistProbs.value
+    // Convenience variables
     val fileSizes = bcRecordsCache.value.fileSizes
     val distortionPrior = bcRecordsCache.value.distortionPrior
     val aggDistortions = accumulators.aggDistortions.value
 
-    /** Add distortion contribution to the log-likelihood on the driver
-      * since it depends on the total number of distortions across all
-      * partitions.
-      */
+    // Add remaining contributions to the log-likelihood on the driver
+
+    // Add distortion contribution, depends on the aggregate distortion across all records
     distortionPrior.zipWithIndex.foreach { case (BetaShapeParameters(alpha, beta), attrId) =>
       fileSizes.foreach { case (fileId, numRecords) =>
         val distProb = distProbs(attrId, fileId)
@@ -378,20 +361,20 @@ object GibbsUpdates {
 
   /** Updates assigned entity for a given record, while collapsing the distortions for the record */
   def updateEntityIdCollapsed(record: Record[DistortedValue],
-                              entities: mutable.LongMap[Entity],
+                              entities: Array[Entity],
                               entityInvertedIndex: EntityInvertedIndex,
                               recordsCache: RecordsCache,
                               distProbs: DistortionProbs)
                              (implicit rand: RandomGenerator): EntityId = {
     val indexedAttributes = recordsCache.indexedAttributes
-    val valuesAndWeights = entities.mapValues { entity =>
+    val weights = entities.map { entity =>
       entity.values.iterator.zipWithIndex.foldLeft(1.0) { case (weight, (entValue, attrId)) =>
         val recValue = record.values(attrId).value
         if (recValue < 0) {
-          /** Record attribute is missing: weight is unchanged */
+          // Record attribute is missing: weight is unchanged
           weight
         } else {
-          /** Record attribute is observed: need to update weight */
+          // Record attribute is observed: need to update weight
           val constAttr = indexedAttributes(attrId).isConstant
           val attributeIndex = indexedAttributes(attrId).index
 
@@ -408,28 +391,26 @@ object GibbsUpdates {
         }
       }
     }
-    DiscreteDist(valuesAndWeights).sample()
+    DiscreteDist(weights).sample()
   }
 
 
   /** Updates assigned entity for a given record using an ordinary Gibbs update */
   def updateEntityId(record: Record[DistortedValue],
-                     entities: mutable.LongMap[Entity],
+                     entities: Array[Entity],
                      entityInvertedIndex: EntityInvertedIndex,
                      recordsCache: RecordsCache)
                     (implicit rand: RandomGenerator): EntityId = {
 
-    val (possibleEntityIds, obsDistAttrIds) = getPossibleEntities(record, entities.keysIterator,
+    val (possibleEntityIds, obsDistAttrIds) = getPossibleEntities(record, entities.indices.iterator,
       entityInvertedIndex, recordsCache.indexedAttributes)
 
     if (obsDistAttrIds.isEmpty) {
-      /** No observed, distorted record attributes implies distribution over possible entity
-        * ids is uniform */
+      // No observed, distorted record attributes implies distribution over possible entity ids is uniform
       val uniformIdx = rand.nextInt(possibleEntityIds.length)
       possibleEntityIds(uniformIdx)
     } else {
-      /** Some observed, distorted record attributes implies distribution over possible entity
-        * ids is non-uniform */
+      // Some observed, distorted record attributes implies distribution over possible entity ids is non-uniform
       val weights = possibleEntityIds.map { entId =>
         obsDistAttrIds.foldLeft(1.0) { (weight, attrId) =>
           val entValue = entities(entId).values(attrId)
@@ -451,15 +432,15 @@ object GibbsUpdates {
 
   /** Updates assigned entity for a given record using an ordinary Gibbs update (without using an inverted index)  */
   def updateEntityIdSeq(record: Record[DistortedValue],
-                        entities: mutable.LongMap[Entity],
+                        entities: Array[Entity],
                         recordsCache: RecordsCache)
                        (implicit rand: RandomGenerator): EntityId = {
 
-    val entitiesAndWeights = entities.keys.map { entId =>
+    val weights = entities.toTraversable.map { entity =>
       var weight = 1.0
       var attrId = 0
       val itRecordValues = record.values.iterator
-      val entValues = entities(entId).values
+      val entValues = entity.values
       while (itRecordValues.hasNext && weight > 0) {
         val distRecValue = itRecordValues.next()
         if (distRecValue.value >= 0) {
@@ -479,9 +460,9 @@ object GibbsUpdates {
         }
         attrId += 1
       }
-      (entId, weight)
-    }.toMap
-    DiscreteDist(entitiesAndWeights).sample()
+      weight
+    }
+    DiscreteDist(weights).sample()
   }
 
 
@@ -495,17 +476,17 @@ object GibbsUpdates {
                           indexedAttributes: IndexedSeq[IndexedAttribute]):
       (IndexedSeq[EntityId], Seq[AttributeId]) = {
 
-    /** Keep track of any observed, distorted record attributes */
+    // Keep track of any observed, distorted record attributes
     val obsDistAttrIds = mutable.ArrayBuffer.empty[AttributeId]
 
-    /** Build an array of sets of entity ids (one set for each observed, non-distorted record attribute) */
-    val bSets = Array.newBuilder[scala.collection.Set[EntityId]]
+    // Build an array of sets of entity ids (one set for each observed, non-distorted record attribute)
+    val sets = mutable.ArrayBuffer.empty[scala.collection.Set[EntityId]]
     var attrId = 0
     while (attrId < indexedAttributes.length) {
       val distRecValue = record.values(attrId)
       if (distRecValue.value >= 0) { // Record attribute is observed
         if (!distRecValue.distorted) { // Record attribute is not distorted
-          bSets += entityInvertedIndex.getEntityIds(attrId, distRecValue.value)
+          sets += entityInvertedIndex.getEntityIds(attrId, distRecValue.value)
         } else { // Record attribute is distorted
           obsDistAttrIds += attrId
         }
@@ -513,32 +494,31 @@ object GibbsUpdates {
       attrId += 1
     }
 
-    /** Sort sets in increasing order of size to improve the efficiency of the multiple set
-      * intersection algorithm */
-    val sets = bSets.result().sortBy(x => x.size)
+    // Sort sets in increasing order of size to improve the efficiency of the multiple set intersection algorithm
+    val sortedSets = sets.sortBy(x => x.size)
 
-    /** Now compute the multiple set intersection, but first handle special cases */
-    if (sets.isEmpty) {
-      /** All of the record attributes are distorted or unobserved, so return all entity ids as possibilities */
+    // Now compute the multiple set intersection, but first handle special cases
+    if (sortedSets.isEmpty) {
+      // All of the record attributes are distorted or unobserved, so return all entity ids as possibilities
       (allEntityIds.toIndexedSeq, obsDistAttrIds)
-    } else if (sets.length == 1) {
-      /** No need to compute intersection for a single set */
-      (sets.head.toIndexedSeq, obsDistAttrIds)
+    } else if (sortedSets.length == 1) {
+      // No need to compute intersection for a single set
+      (sortedSets.head.toIndexedSeq, obsDistAttrIds)
     } else {
-      /** ArrayBuffer to store result of the multiple set intersection */
+      // ArrayBuffer to store result of the multiple set intersection
       var result = mutable.ArrayBuffer.empty[EntityId]
 
-      /** Compute the intersection of the first and second sets and store in `result` */
-      val firstSet = sets(0)
-      val secondSet = sets(1)
+      // Compute the intersection of the first and second sets and store in `result`
+      val firstSet = sortedSets(0)
+      val secondSet = sortedSets(1)
       firstSet.foreach { entId => if (secondSet.contains(entId)) result += entId }
 
-      /** Update `result` after intersecting with each of the remaining sets */
+      // Update `result` after intersecting with each of the remaining sets
       var i = 2
-      while (i < sets.length) {
+      while (i < sortedSets.length) {
         val temp = mutable.ArrayBuffer.empty[EntityId]
 
-        val newSet = sets(i)
+        val newSet = sortedSets(i)
         result.foreach { entId => if (newSet.contains(entId)) temp += entId}
         result = temp
 
@@ -554,7 +534,7 @@ object GibbsUpdates {
   def perturbedDistYCollapsed(attrId: AttributeId,
                               constAttr: Boolean,
                               attributeIndex: AttributeIndex,
-                              records: Array[Record[DistortedValue]],
+                              records: IndexedSeq[Record[DistortedValue]],
                               observedLinkedRowIds: Iterator[Int],
                               distProbs: DistortionProbs,
                               baseDistribution: DiscreteDist[ValueId])
@@ -571,16 +551,14 @@ object GibbsUpdates {
 
       if (constAttr) {
         val weight = 1.0 + (1.0 / distProb - 1.0) / recValueProb
-        /** If key already exists, do a multiplicative update, otherwise
-          * add a new key with value `weight` */
+        // If key already exists, do a multiplicative update, otherwise add a new key with value `weight`
         valuesWeights.update(distRecValue.value, weight * valuesWeights.getOrElse(distRecValue.value, 1.0))
       } else {
         val recValueNorm = attributeIndex.simNormalizationOf(distRecValue.value)
-        /** Iterate over values similar to record value */
+        // Iterate over values similar to record value
         attributeIndex.simValuesOf(distRecValue.value).foreach { case (simValue, expSim) =>
           val weight = if (distRecValue.value == simValue) expSim + (1.0 / distProb - 1.0) / (recValueProb * recValueNorm) else expSim
-          /** If key already exists, do a multiplicative update, otherwise
-            * add a new key with value `weight` */
+          // If key already exists, do a multiplicative update, otherwise add a new key with value `weight`
           valuesWeights.update(simValue, weight * valuesWeights.getOrElse(simValue, 1.0))
         }
       }
@@ -597,7 +575,7 @@ object GibbsUpdates {
     */
   def updateEntityValueCollapsed(attrId: AttributeId,
                                  indexedAttribute: IndexedAttribute,
-                                 records: Array[Record[DistortedValue]],
+                                 records: IndexedSeq[Record[DistortedValue]],
                                  linkedRowIds: Traversable[Int],
                                  distProbs: DistortionProbs)
                                 (implicit rand: RandomGenerator): ValueId = {
@@ -626,7 +604,7 @@ object GibbsUpdates {
     */
   def updateEntityValue(attrId: AttributeId,
                         indexedAttribute: IndexedAttribute,
-                        records: Array[Record[DistortedValue]],
+                        records: IndexedSeq[Record[DistortedValue]],
                         linkedRowIds: Traversable[Int])
                        (implicit rand: RandomGenerator): ValueId = {
     val observedLinkedRowIds = linkedRowIds.filter(rowId => records(rowId).values(attrId).value >= 0)
@@ -638,7 +616,7 @@ object GibbsUpdates {
     if (observedLinkedRowIds.isEmpty) {
       baseDistribution.sample()
     } else {
-      /** Search for an observed, non-distorted value */
+      // Search for an observed, non-distorted value
       var nonDistortedValue: ValueId = -1
       val itLinkedRowIds = observedLinkedRowIds.toIterator
       while (itLinkedRowIds.hasNext && nonDistortedValue < 0) {
@@ -648,10 +626,10 @@ object GibbsUpdates {
       }
 
       if (nonDistortedValue >= 0) {
-        /** Observed, non-distorted value exists, so the new value is determined */
+        // Observed, non-distorted value exists, so the new value is determined
         nonDistortedValue
       } else {
-        /** All observed linked record values are distorted for this attribute. */
+        // All observed linked record values are distorted for this attribute.
         if (constAttribute) {
           baseDistribution.sample()
         } else {
@@ -673,7 +651,7 @@ object GibbsUpdates {
     */
   def updateEntityValueSeq(attrId: AttributeId,
                            indexedAttribute: IndexedAttribute,
-                           records: Array[Record[DistortedValue]],
+                           records: IndexedSeq[Record[DistortedValue]],
                            linkedRowIds: Traversable[Int])
                           (implicit rand: RandomGenerator): ValueId = {
     val observedLinkedRowIds = linkedRowIds.filter(rowId => records(rowId).values(attrId).value >= 0)
@@ -692,10 +670,10 @@ object GibbsUpdates {
       }
 
       if (nonDistortedValue >= 0) {
-        /** Observed, non-distorted value exists, so the new value is determined */
+        // Observed, non-distorted value exists, so the new value is determined
         nonDistortedValue
       } else {
-        /** All observed linked record values are distorted for this attribute. */
+        // All observed linked record values are distorted for this attribute
         if (constAttribute) {
           index.draw()
         } else {
@@ -723,7 +701,7 @@ object GibbsUpdates {
   /** Computes the perturbation distribution corresponding to updateEntityValue */
   def perturbedDistY(attrId: AttributeId,
                      attributeIndex: AttributeIndex,
-                     records: Array[Record[DistortedValue]],
+                     records: IndexedSeq[Record[DistortedValue]],
                      observedLinkedRowIds: Iterator[Int],
                      baseDistribution: DiscreteDist[ValueId])
                     (implicit rand: RandomGenerator): DiscreteDist[ValueId] = {
@@ -735,10 +713,9 @@ object GibbsUpdates {
       val distRecValue = records(rowId).values(attrId)
 
       if (distRecValue.value >= 0) { // Record value is observed
-        /** Iterate over values similar to record value */
+        // Iterate over values similar to record value
         attributeIndex.simValuesOf(distRecValue.value).foreach { case (simValue, expSim) =>
-          /** If key already exists, do a multiplicative update, otherwise
-            * add a new key with value `expSim` */
+          // If key already exists, do a multiplicative update, otherwise add a new key with value `expSim`
           valuesWeights.update(simValue, expSim * valuesWeights.getOrElse(simValue, 1.0))
         }
       }
@@ -750,16 +727,17 @@ object GibbsUpdates {
   }
 
 
-  /** Updates the attribute values for all entities */
-  def updateEntityValues(records: Array[Record[DistortedValue]],
+  /** Updates the attribute values for all entities in-place */
+  def updateEntityValues(records: IndexedSeq[Record[DistortedValue]],
+                         entities: Array[Entity],
                          linksIndex: LinksIndex,
                          distProbs: DistortionProbs,
                          recordsCache: RecordsCache,
                          collapsedEntityValues: Boolean,
                          sequential: Boolean)
-                        (implicit rand: RandomGenerator): mutable.LongMap[Entity] = {
-    val newEntities = mutable.LongMap.empty[Entity] // TODO: use builder?
-    linksIndex.toIterator.foreach { case (entId, linkedRowIds) =>
+                        (implicit rand: RandomGenerator): Unit = {
+    for (entId <- entities.indices) {
+      val linkedRowIds = linksIndex.getLinkedRows(entId)
       val entityValues = Array.tabulate(recordsCache.numAttributes) { attrId =>
         val indexedAttribute = recordsCache.indexedAttributes(attrId)
         if (sequential) {
@@ -772,9 +750,8 @@ object GibbsUpdates {
           }
         }
       }
-      newEntities += (entId -> Entity(entId, entityValues))
+      entities(entId) = Entity(entityValues)
     }
-    newEntities
   }
 }
 

@@ -28,10 +28,10 @@ package object dblink {
   type FileId = String
   type RecordId = String
   type PartitionId = Int
-  type EntityId = Long
+  type EntityId = Int
   type ValueId = Int
   type AttributeId = Int
-  type Partitions = RDD[(PartitionId, EntRecPair)]
+  type Partitions = RDD[(PartitionId, EntRecCluster)]
   type AggDistortions = Map[(AttributeId, FileId), Long]
   type Cluster = Set[RecordId]
   type RecordPair = (RecordId, RecordId)
@@ -48,16 +48,18 @@ package object dblink {
     */
   case class Record[T](id: RecordId,
                        fileId: FileId,
-                       values: Array[T])
+                       values: Array[T]) {
+    def mkString: String = s"Record(id=$id, fileId=$fileId, values=${values.mkString(",")})"
+  }
 
 
   /** Latent entity
     *
-    * @param id a unique identifier for the entity.
     * @param values attribute values for the entity.
     */
-  case class Entity(id: EntityId,
-                    values: Array[ValueId])
+  case class Entity(values: Array[ValueId]) {
+    def mkString: String = s"Entity(${values.mkString(",")})"
+  }
 
 
   /** Attribute value subject to distortion
@@ -65,24 +67,25 @@ package object dblink {
     * @param value the attribute value
     * @param distorted whether the value is distorted
     */
-  case class DistortedValue(value: ValueId, distorted: Boolean)
+  case class DistortedValue(value: ValueId, distorted: Boolean) {
+    def mkString: String = s"DistortedValue(value=$value, distorted=$distorted"
+  }
 
 
-  /** Linked entity-record pair
-    *
+  /**
+    * Entity-record cluster
     * @param entity a latent entity
-    * @param record a record
+    * @param records records linked to the entity
     */
-  case class EntRecPair(entity: Entity,
-                        record: Option[Record[DistortedValue]]) {
+  case class EntRecCluster(entity: Entity,
+                           records: Option[Array[Record[DistortedValue]]]) {
     def mkString: String = {
-      record match {
-        case Some(r) => s"entId: ${entity.id}\tvalues: ${entity.values.mkString}\t\trecId: ${r.id}\tvalues: ${r.values.mkString}"
-        case None => s"entId: ${entity.id}\tvalues: ${entity.values.mkString}"
+      records match {
+        case Some(r) => s"${entity.mkString}\t->\t${r.mkString(", ")}"
+        case None => entity.mkString
       }
     }
   }
-
 
   /** Linkage state
     *
@@ -90,19 +93,18 @@ package object dblink {
     */
   case class LinkageState(iteration: Long,
                           partitionId: PartitionId,
-                          linkageStructure: Map[EntityId, Seq[RecordId]])
+                          linkageStructure: Seq[Seq[RecordId]])
 
 
-  /** Linked partition-entity-record triple
+  /** Partition-entity-record cluster triple
     *
     * This class is used in the Dataset representation of the partitions---not
     * the RDD representation.
     *
     * @param partitionId identifier for the partition
-    * @param entRecPair linked entity-record pair
+    * @param entRecCluster entity cluster of records
     */
-  case class PartEntRecTriple(partitionId: PartitionId, entRecPair: EntRecPair)
-
+  case class PartEntRecCluster(partitionId: PartitionId, entRecCluster: EntRecCluster)
 
   /** Container for the summary variables
     *

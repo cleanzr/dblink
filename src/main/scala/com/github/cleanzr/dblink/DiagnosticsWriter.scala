@@ -40,7 +40,7 @@ class DiagnosticsWriter(path: String, continueChain: Boolean)
     val recordsCache = state.bcRecordsCache.value
     val aggDistortionsHeaders = recordsCache.indexedAttributes.map(x => s"aggDist-${x.name}").mkString(",")
     val recDistortionsHeaders = (0 to recordsCache.numAttributes).map(k => s"recDistortion-$k").mkString(",")
-    writer.write(s"iteration,systemTime-ms,numObservedEntities,logLikelihood,$aggDistortionsHeaders,$recDistortionsHeaders\n")
+    writer.write(s"iteration,systemTime-ms,numObservedEntities,logLikelihood,popSize,$aggDistortionsHeaders,$recDistortionsHeaders\n")
   }
 
   /** Write a row of diagnostics for the given state */
@@ -62,8 +62,9 @@ class DiagnosticsWriter(path: String, continueChain: Boolean)
     val row: Iterator[String] = Iterator(
         state.iteration.toString,                                                          // iteration
         System.currentTimeMillis().toString,                                               // systemTime-ms
-        (state.bcParameters.value.populationSize - state.summaryVars.numIsolates).toString,   // numObservedEntities
-        f"${state.summaryVars.logLikelihood}%.9e") ++                                      // logLikelihood
+        (state.populationSize - state.summaryVars.numIsolates).toString,                   // numObservedEntities
+        f"${state.summaryVars.logLikelihood}%.9e",                                         // logLikelihood
+        state.populationSize.toString) ++                                                  // populationSize
         (0 until numAttributes).map(aggAttrDistortions.getOrElse(_, 0L).toString) ++       // aggDist-*
         (0 to numAttributes).map(recDistortions.getOrElse(_, 0L).toString)                 // recDistortion-*
 
