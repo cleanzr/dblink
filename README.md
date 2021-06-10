@@ -4,7 +4,7 @@
 It's based on a Bayesian model called `blink` 
 [(Steorts, 2015)](https://projecteuclid.org/euclid.ba/1441790411), 
 with extensions proposed in
-[(Marchant et al, 2019)](https://arxiv.org/abs/1909.06039).
+[(Marchant et al., 2021)](https://doi.org/10.1080/10618600.2020.1825451).
 Unlike many ER algorithms, `dblink` approximates the full posterior 
 distribution over clusterings of records (into entities).
 This facilitates propagation of uncertainty to post-ER analysis, 
@@ -90,6 +90,9 @@ You can also contact the main developer by email `<GitHub username> <at> gmail.c
 GPL-3
 
 ## Citing the package
-Marchant, N. G., Steorts R. C., Kaplan, A., Rubinstein, B. I. P., Elazar, D. N. 
-(2019). dblink: Distributed End-to-End Bayesian Entity Resolution. _eprint 
-arXiv:1909.06039_ URL: [https://arxiv.org/abs/1909.06039](https://arxiv.org/abs/1909.06039).
+
+Marchant, N. G., Kaplan, A., Elazar, D. N., Rubinstein, B. I. P. and 
+Steorts, R. C. (2021). d-blink: Distributed End-to-End Bayesian Entity 
+Resolution. _Journal of Computational and Graphical Statistics_, _30_(2), 
+406–421. DOI: [10.1080/10618600.2020.1825451](https://doi.org/10.1080/10618600.2020.1825451)
+arXiv: [1909.06039](https://arxiv.org/abs/1909.06039).
